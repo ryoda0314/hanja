@@ -1,0 +1,67 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  --font-ui: "Noto Sans KR", system-ui, -apple-system, sans-serif;
+  --font-hanja: "Noto Serif KR", "Noto Sans KR", serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-ui);
+  color: #ededef;
+  -webkit-tap-highlight-color: transparent;
+  /* 落ち着いた墨色のニュートラル背景 */
+  background-color: #0b0b0d;
+  background-image: linear-gradient(180deg, #131316 0%, #0b0b0d 60%);
+  background-attachment: fixed;
+}
+
+/* 漢字グリフ用の明朝体（文字を主役にする） */
+.font-hanja {
+  font-family: var(--font-hanja);
+  font-weight: 700;
+}
+
+/* カードの斜め光沢（ホログラム風）。上位レアに付与 */
+.holo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    115deg,
+    rgba(255, 255, 255, 0) 40%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0) 60%
+  );
+  pointer-events: none;
+}
+
+/* 細いスクロールバー */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
+}
+::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 9999px;
+}
+
+/* 横スクロール領域のスクロールバー非表示（チップ列など） */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
