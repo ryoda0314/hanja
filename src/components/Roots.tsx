@@ -34,9 +34,12 @@ export function Roots({
   hanja,
   notes,
   grow = false,
+  masked = false,
 }: {
   hangul: string;
   hanja: string;
+  /** 漢字を伏せる（まだ集めていない語）。その語での音節だけ見せ、字・訓・日本語の読みは ？ に。 */
+  masked?: boolean;
   /** 字ごとの添え書き（はじめての字・また出会った字）。 */
   notes?: (ReactNode | null)[];
   /** 根が伸びるように一つずつ現れる（あつめた直後）。 */
@@ -54,6 +57,22 @@ export function Roots({
         const r = d?.readings[0];
         const jp = d?.jp && d.jp !== c ? d.jp : null;
         const ja = [d?.on?.[0], d?.kun?.[0]].filter(Boolean).join("・");
+        if (masked) {
+          return (
+            <li key={i}>
+              <div className={styles.root}>
+                {aligned ? (
+                  <span className={`${styles.syllable} t-ko`} lang="ko">
+                    {syllables[i]}
+                  </span>
+                ) : null}
+                <span className={`hanja ${styles.glyph} ${styles.glyphMasked}`} aria-hidden="true">
+                  ？
+                </span>
+              </div>
+            </li>
+          );
+        }
         return (
           <li key={i} className={grow ? styles.grow : undefined} style={{ "--i": i } as CSSProperties}>
             <Link to={`/hanja/${encodeURIComponent(c)}`} className={styles.root}>
@@ -66,7 +85,8 @@ export function Roots({
               {script === "both" && jp ? <span className={`hanja ${styles.jpMark}`}>{jp}</span> : null}
               {r ? (
                 <span className={`${styles.reading} t-ko`} lang="ko">
-                  {r.hun ? `${r.hun} ${r.eum}` : r.eum}
+                  {r.hun ? <span className={styles.hun}>{r.hun} </span> : null}
+                  <span className={styles.eumPart}>{r.eum}</span>
                 </span>
               ) : null}
               {ja ? <span className={styles.ja}>{ja}</span> : null}

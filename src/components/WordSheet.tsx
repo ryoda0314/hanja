@@ -1,7 +1,8 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { useMemo, useState, type FormEvent } from "react";
 import { unlockedBy, wordKey } from "../data/combine";
-import { splitHanja } from "../data/dataset";
+import { jpForm, splitHanja } from "../data/dataset";
+import { isSameReading, readingNotes } from "../data/reading";
 import { enrich } from "../data/resolver";
 import { wordOf } from "../data/sentences";
 import type { WordData } from "../data/types";
@@ -15,15 +16,15 @@ import { Roots, rootNotes } from "./Roots";
 import { SentenceRows } from "./SentenceView";
 import { Sheet } from "./Sheet";
 import { SpeakButton } from "./SpeakButton";
-import { glossLang, WordRow } from "./WordRow";
+import { glossLang, MaskedHanja, WordRow } from "./WordRow";
 import styles from "./WordSheet.module.css";
 
 type Word = Pick<WordData, "hangul" | "hanja" | "gloss">;
 
 /**
  * 一つの語を開いたところ：ハングル、漢字、意味、漢字の根。集めた語なら、同じ字でつながった語と外す操作。
- * まだ集めていない語は、自分の指でハングルを打ってあつめる（ボタン一つでは集めない。打つ一手間に意味がある）。
- * テストではない：答えは上に出ている。
+ * まだ集めていない語は、図鑑のつかまえる前のように漢字を ？ で伏せる。ハングルを自分の指で打ってあつめると、
+ * 答え合わせとして漢字が開き、根が下から伸びる（ボタン一つでは集めない。打つ一手間に意味がある）。
  */
 export function WordSheet({ word, onClose }: { word: Word; onClose: () => void }) {
   const [current, setCurrent] = useState<Word>(word);
@@ -64,6 +65,8 @@ function Body({
   // あつめて新しく読めるようになった語（あつめる前の手持ちで数えておく）。
   const [unlocked, setUnlocked] = useState<WordData[] | null>(null);
   const [confirming, setConfirming] = useState(false);
+  // まだ集めていない語の漢字は伏せる。
+  const masked = !owned;
 
   const words = useWords();
   const chars = useChars();
@@ -74,12 +77,15 @@ function Body({
     [owned, chars, words, word.hangul, hanja, collected, ownedKeys]
   );
   const fresh = new Set(splitHanja(hanja).filter((c) => !collected.has(c))).size;
+  const notes = readingNotes(word.hangul, hanja);
+  // 意味の訳に漢字そのものが書いてあれば（学生 など）、集めるまで伏せる。
+  const glossSpoils = [...splitHanja(hanja), ...splitHanja(jpForm(hanja))].some((c) => word.gloss.includes(c));
   const sentences = useSentences();
   const sentenceIds = useMemo(
     () => (sentences?.byWord.get(`${word.hangul}|${hanja}`) ?? []).slice(0, 3),
     [sentences, word.hangul, hanja]
   );
-  // この語が出てくる文（ことのあめ の例文）。印の別の語を押すと、その語に替わる。
+  // この語が出てくる文（ことのあめ の例文）。集めていない語の漢字は文の中でも ？。印の別の語を押すと、その語に替わる。
   const examples =
     sentences && sentenceIds.length > 0 ? (
       <section className={styles.section}>
@@ -106,7 +112,8 @@ function Body({
 
   async function collect(e: FormEvent) {
     e.preventDefault();
-    if (typed.replace(/\s/g, "") !== word.hangul) {
+    if (!typed.trim()) return;
+    if (!isSameReading(typed, word.hangul)) {
       setWrong(true);
       return;
     }
@@ -130,24 +137,43 @@ function Body({
           <h2 id="word-sheet-title" className={`${styles.big} t-ko`} lang="ko">
             {word.hangul}
           </h2>
-          <HanjaText ko={hanja} className={styles.bigHanja} />
+          {masked ? (
+            <MaskedHanja hanja={hanja} className={styles.bigHanja} />
+          ) : (
+            <HanjaText ko={hanja} className={before ? `${styles.bigHanja} ${styles.reveal}` : styles.bigHanja} />
+          )}
         </div>
         <SpeakButton text={word.hangul} size="lg" />
       </div>
-      {word.gloss ? (
+      {word.gloss && !(masked && glossSpoils) ? (
         <p className={styles.gloss} lang={glossLang(word.gloss)}>
           {word.gloss}
         </p>
       ) : null}
 
       <section className={styles.section}>
-        <Roots hangul={word.hangul} hanja={hanja} notes={before ? rootNotes(before) : undefined} grow={before !== null} />
-        <p className={appStyles.note}>{t.sheet.rootsNote}</p>
+        <Roots
+          hangul={word.hangul}
+          hanja={hanja}
+          masked={masked}
+          notes={before ? rootNotes(before) : undefined}
+          grow={before !== null}
+        />
+        {masked ? null : <p className={appStyles.note}>{t.sheet.rootsNote}</p>}
+        {!masked && notes.length > 0 ? (
+          <ul className={styles.notes}>
+            {notes.map((n) => (
+              <li key={n.char}>{t.read.variant(n.char, n.usual, n.here)}</li>
+            ))}
+          </ul>
+        ) : null}
       </section>
 
       {owned ? (
         <>
-          <p className={styles.since}>{before ? t.collect.collectedTitle(word.hangul) : t.sheet.since(owned.addedAt)}</p>
+          <p className={styles.since}>
+            {before ? t.collect.collectedTitle(word.hangul) : t.sheet.since(owned.addedAt)}
+          </p>
           {unlocked && unlocked.length > 0 ? (
             <section className={styles.section}>
               <Gain count={unlocked.length} when="after" />

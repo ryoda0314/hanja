@@ -17,6 +17,8 @@
 /* まだの語。 */
 .new { text-decoration-color: var(--line-2); text-decoration-thickness: 1.5px; }
 .target { background: var(--tint); }
+/* まだ集めていない語の漢字（？ で伏せる）。 */
+.ko rt.rtMasked { color: var(--faint); }
 
 .glossMark { background: var(--tint); color: var(--accent); border-radius: 0.15em; padding: 0 0.1em; }
 

@@ -1,13 +1,16 @@
 import { jpForm } from "../data/dataset";
 import { audioUrl, markStatus, segments, type Sentence, type SentenceData, type SentenceMark } from "../data/sentences";
 import { usePrefs } from "../prefs";
+import { t } from "../copy";
 import { usePref } from "../util/local";
 import { SpeakButton } from "./SpeakButton";
+import { hanjaMask } from "./WordRow";
 import styles from "./SentenceView.module.css";
 
 /**
  * 例文の韓国語。漢字語には印を付けて押せるようにする：集めた語は紫の点線（また出会った）、集めた字で読める語は
- * アクセントの線、まだの語は細い線。showHanja なら語の上に漢字を小さく添える。target の語は地の色で示す。
+ * アクセントの線、まだの語は細い線。showHanja なら語の上に漢字を小さく添える。ただし まだ集めていない語の漢字は
+ * ？ で伏せる（ハングルを打ってあつめると開く）。target の語は地の色で示す。
  */
 export function SentenceView({
   sentence,
@@ -32,16 +35,22 @@ export function SentenceView({
         if (!("mark" in p)) return <span key={i}>{p.text}</span>;
         const m = p.mark;
         const status = markStatus(m, collected, owned);
-        const shown = script === "ja" ? jpForm(m.hanja) : m.hanja;
-        const className = [styles.mark, styles[status], target === `${m.hangul}|${m.hanja}` ? styles.target : ""]
-          .filter(Boolean)
-          .join(" ");
+        // まだ集めていない語の漢字は伏せる。
+        const shown = status !== "owned" ? hanjaMask(m.hanja) : script === "ja" ? jpForm(m.hanja) : m.hanja;
+        const isTarget = target === `${m.hangul}|${m.hanja}`;
+        const className = [styles.mark, styles[status], isTarget ? styles.target : ""].filter(Boolean).join(" ");
         return (
-          <button key={i} type="button" className={className} onClick={() => onWord(m)} aria-label={`${m.hangul} ${shown}`}>
+          <button
+            key={i}
+            type="button"
+            className={className}
+            onClick={() => onWord(m)}
+            aria-label={status === "owned" ? `${m.hangul} ${shown}` : `${m.hangul}（${t.sheet.maskedLabel}）`}
+          >
             {showHanja ? (
               <ruby>
                 {p.text}
-                <rt className="hanja">{shown}</rt>
+                <rt className={status === "owned" ? "hanja" : `hanja ${styles.rtMasked}`}>{shown}</rt>
               </ruby>
             ) : (
               p.text
@@ -102,6 +111,8 @@ export function SentenceRows({
   target?: { hangul: string; hanja: string };
   onWord: (m: SentenceMark) => void;
 }) {
+  // 訳の中で target の日本の字を示すのは、その語を集めてから（集める前は漢字が答えなので）。
+  const targetOwned = target ? owned.has(`${target.hangul}|${target.hanja}`) : false;
   const [showHanja] = usePref("meetHanja", true);
   return (
     <ul className={styles.rows}>
@@ -119,7 +130,7 @@ export function SentenceRows({
                 onWord={onWord}
               />
               <span className={styles.rowGloss}>
-                <GlossText ja={s.ja} hanja={target?.hanja} />
+                <GlossText ja={s.ja} hanja={targetOwned ? target?.hanja : undefined} />
               </span>
             </div>
             <SpeakButton text={s.ko} src={data.audioBase ? () => audioUrl(data.audioBase, s.ko) : undefined} />

@@ -21,3 +21,8 @@
 .confirm > p { flex-basis: 100%; }
 .quietDanger { min-height: var(--tap); padding: 0 12px; border: 0; background: none; color: var(--muted); font: inherit; font-size: 13px; text-decoration: underline; cursor: pointer; }
 .danger { min-height: 40px; padding: 0 16px; border: 1px solid var(--danger); border-radius: 8px; background: var(--paper); color: var(--danger); font: inherit; font-size: 14px; cursor: pointer; }
+
+/* 答え合わせ：あつめると、伏せていた漢字が開く。字のふだんの音とこの語での音の違いも添える。 */
+.reveal { animation: hanja-open 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes hanja-open { from { opacity: 0; transform: translateY(8px) scale(0.94); } }
+.notes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 14px; line-height: 1.7; color: var(--again); font-weight: 500; }

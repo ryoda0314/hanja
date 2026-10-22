@@ -5,6 +5,7 @@ import { t } from "../copy";
 import { MarkLegend, SentenceView } from "../components/SentenceView";
 import { SpeakButton } from "../components/SpeakButton";
 import HanjaText from "../components/HanjaText";
+import { MaskedHanja } from "../components/WordRow";
 import { addSeen, readSeen, usePref } from "../util/local";
 import app from "../app.module.css";
 import styles from "./Meet.module.css";
@@ -108,7 +109,11 @@ export function Meet({
                     <span className="t-ko" lang="ko">
                       {w.hangul}
                     </span>
-                    <HanjaText ko={w.hanja} className={styles.chipHanja} />
+                    {status === "owned" ? (
+                      <HanjaText ko={w.hanja} className={styles.chipHanja} />
+                    ) : (
+                      <MaskedHanja hanja={w.hanja} className={styles.chipHanja} />
+                    )}
                   </button>
                 ))}
               </div>
