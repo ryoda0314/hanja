@@ -1,36 +1,28 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
     react(),
-    tailwindcss(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["icons/icon-192.png", "icons/icon-512.png"],
+      includeAssets: ["icons/icon-192.png", "icons/icon-512.png", "icons/maskable-512.png", "sister/kotonoame.png"],
       manifest: {
-        name: "한자 도감 — 韓国語 漢字語あつめ",
-        short_name: "한자 도감",
-        description: "韓国語の漢字語を集めて学べる学習アプリ",
-        lang: "ko",
+        name: "ことのね",
+        short_name: "ことのね",
+        description: "覚えた韓国語を、漢字の根でつなぐ。",
+        lang: "ja",
         start_url: "./",
         scope: "./",
         display: "standalone",
-        orientation: "portrait",
-        background_color: "#0b0b0d",
-        theme_color: "#0b0b0d",
+        background_color: "#fcfbf8",
+        theme_color: "#fcfbf8",
         icons: [
-          { src: "icons/icon-192.png", sizes: "192x192", type: "image/png" },
-          { src: "icons/icon-512.png", sizes: "512x512", type: "image/png" },
-          {
-            src: "icons/icon-512.png",
-            sizes: "512x512",
-            type: "image/png",
-            purpose: "maskable",
-          },
+          { src: "icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+          { src: "icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+          { src: "icons/maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
         ],
       },
       workbox: {
@@ -40,7 +32,7 @@ export default defineConfig({
         navigateFallback: "index.html",
         runtimeCaching: [
           {
-            // Google Fonts（明朝/サンセリフ）は初回オンライン後キャッシュ。
+            // Google Fonts（IBM Plex・明朝）は初回オンライン後キャッシュ。
             urlPattern: ({ url }) =>
               url.origin === "https://fonts.googleapis.com" ||
               url.origin === "https://fonts.gstatic.com",

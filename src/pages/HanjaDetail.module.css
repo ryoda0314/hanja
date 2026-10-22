@@ -1,0 +1,8 @@
+.titleEum { margin-left: 10px; font-weight: 500; color: var(--muted); }
+.eumRow { display: flex; align-items: center; gap: 10px; }
+.ja { display: flex; flex-direction: column; }
+.ja small { display: inline-block; width: 1.6em; font-size: 11px; color: var(--muted); }
+.meaning { display: flex; flex-direction: column; gap: 4px; }
+.meaning p { margin: 0; font-size: 15px; line-height: 1.7; color: var(--ink-2); overflow-wrap: anywhere; }
+.owned { margin: 0; font-size: 13px; font-weight: 600; color: var(--accent); }
+.paged { display: flex; flex-direction: column; }

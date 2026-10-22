@@ -1,6 +1,6 @@
 # データの出典とライセンス
 
-本アプリのバンドル辞書データ（`public/data/words.json`, `public/data/hanja-chars.json`）は、
+本アプリ（ことのね）のバンドル辞書データ（`public/data/words.json`, `public/data/hanja-chars.json`）は、
 以下の公開データから `scripts/build-data.mjs` で生成しています。各ライセンスの帰属表示義務を
 満たすため、ここに出典を明記します。
 
@@ -11,11 +11,12 @@
 - 本アプリは kengdic からハングル・漢字・英語語義を抽出し、純粋な漢字語（1音節=1漢字）のみを
   フィルタして再配布しています（派生物）。CC-BY-SA 3.0 の継承条件に留意すること。
 
-## 2. Unicode Unihan Database（漢字の意味・画数）
+## 2. Unicode Unihan Database（漢字の意味・画数・読み）
 
 - 出典: Unicode Character Database — Unihan, https://www.unicode.org/charts/unihan.html
 - ライセンス: Unicode License v3（寛容、帰属表示で再配布可）
-- `kDefinition`（英語の意味）と `kTotalStrokes`（画数）を利用。
+- `kDefinition`（英語の意味）、`kTotalStrokes`（画数）、`kHangul`（韓国の標準の読みと、基礎漢字1800字＝교육용 기초 한자 の印 E）、
+  `kJapanese`（日本語の音読み・訓読み）を利用。
 
 ## 3. kyujitai（旧字体↔新字体 対応）
 

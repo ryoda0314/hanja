@@ -1,67 +1,122 @@
-@import "tailwindcss";
-
+/* ことのね: 覚えた言葉を、漢字の根でつなぐ。姉妹アプリ ことのあめ と同じ紙と墨。ほんのり温かい白い紙、紺の墨、
+   アクセントは1色（既定は わかば）、また出会った字はアイコンの紫で知らせる。
+   アプリの画面ではグラデーションも影も使わず、区切りは罫線。 */
 :root {
-  color-scheme: dark;
-  --font-ui: "Noto Sans KR", system-ui, -apple-system, sans-serif;
-  --font-hanja: "Noto Serif KR", "Noto Sans KR", serif;
+  --paper: #fcfbf8;
+  --surface: #f1f4f8;
+  --ink: #172033;
+  --ink-2: #3b4558;
+  --muted: #5c6578;
+  --faint: #8c94a5;
+  --line: #e4e7ec;
+  --line-2: #d4d9e1;
+  --danger: #b42318;
+  --danger-tint: #fdf0ee;
+
+  /* わかば（ことのね の色）。ほかの色は下の data-accent で。 */
+  --accent: #0f7a50;
+  --tint: #e3f1e9;
+  /* また出会った字（ことのあめ の「前にも降ったかたち」と同じ紫）。 */
+  --again: #6a4fe0;
+  --again-tint: #efebff;
+
+  /* アイコンの色。絵にだけ使う。 */
+  --leaf-green: #2fb67c;
+  --leaf-sky: #4ea7fd;
+  --root-violet: #a792fa;
+  --root-pink: #e79dfa;
+
+  --radius: 12px;
+  --tap: 44px;
+  /* 下のタブの下の余白：ホームインジケーターの分から、タブ自身の余白を引いたもの。 */
+  --nav-bottom: max(8px, env(safe-area-inset-bottom, 0px) - 12px);
+
+  --font-ui: "IBM Plex Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif;
+  --font-ko: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --font-en: "IBM Plex Sans JP", "Helvetica Neue", sans-serif;
+  /* 漢字は明朝で（辞書の見出しのように）。韓国の字形を先に、無い字は日本の明朝で。 */
+  --font-hanja: "Noto Serif KR", "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho", serif;
+  --font-mincho: "Shippori Mincho", "Hiragino Mincho ProN", "Yu Mincho", serif;
+
+  color-scheme: light;
 }
 
-html,
-body,
-#root {
-  height: 100%;
-}
+/* 学ぶ人が選ぶアクセント（自分 → 表示）。あめ・すみ・あじさい・ゆうやけ は ことのあめ と同じ。 */
+[data-accent="rain"] { --accent: #0a64f0; --tint: #e6f0ff; }
+[data-accent="ink"] { --accent: #172033; --tint: #eceef2; }
+[data-accent="hydrangea"] { --accent: #6a4fe0; --tint: #efebff; }
+[data-accent="dusk"] { --accent: #b9462a; --tint: #fbede8; }
 
+* { box-sizing: border-box; }
+
+html, body { margin: 0; padding: 0; }
+
+/* 上に送った要素は、ステータスバーの帯の下で止まる。 */
+html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+
+/* どの画面もステータスバーの下から。帯そのものは .status-fill が塗る。 */
 body {
-  margin: 0;
+  padding-top: env(safe-area-inset-top, 0px);
+  background: var(--paper);
+  color: var(--ink);
   font-family: var(--font-ui);
-  color: #ededef;
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
-  /* 落ち着いた墨色のニュートラル背景 */
-  background-color: #0b0b0d;
-  background-image: linear-gradient(180deg, #131316 0%, #0b0b0d 60%);
-  background-attachment: fixed;
 }
 
-/* 漢字グリフ用の明朝体（文字を主役にする） */
-.font-hanja {
-  font-family: var(--font-hanja);
-  font-weight: 700;
-}
-
-/* カードの斜め光沢（ホログラム風）。上位レアに付与 */
-.holo::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    115deg,
-    rgba(255, 255, 255, 0) 40%,
-    rgba(255, 255, 255, 0.08) 50%,
-    rgba(255, 255, 255, 0) 60%
-  );
+/* ステータスバーの裏の無地の帯（無い端末では高さ0）。無いと iOS が下を流れる中身にグラデーションをかける。 */
+.status-fill {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 15;
+  height: env(safe-area-inset-top, 0px);
+  background: var(--paper);
   pointer-events: none;
 }
 
-/* 細いスクロールバー */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
-}
-::-webkit-scrollbar {
-  height: 6px;
-  width: 6px;
-}
-::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.3);
-  border-radius: 9999px;
+a { color: inherit; }
+button, input, select, textarea { font: inherit; color: inherit; }
+h1, h2, h3 { text-wrap: balance; }
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.t-ko { font-family: var(--font-ko); }
+.t-en { font-family: var(--font-en); }
+/* 漢字（字・語の表記）。 */
+.hanja { font-family: var(--font-hanja); font-weight: 500; }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }
 
-/* 横スクロール領域のスクロールバー非表示（チップ列など） */
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
+/* 共通の操作 */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 52px; padding: 0 24px; border-radius: var(--radius);
+  border: 1px solid var(--accent); background: var(--accent); color: #fff;
+  font-size: 16px; font-weight: 600; text-decoration: none; cursor: pointer;
 }
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+.btn:disabled { opacity: 0.55; cursor: default; }
+/* し終えたところ（あつめました）：次に打つまでボタン自身がそう言う。 */
+.btn[data-done] { background: var(--tint); border-color: var(--tint); color: var(--accent); }
+.btn-quiet {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 52px; padding: 0 20px; border-radius: var(--radius);
+  border: 1px solid var(--line-2); background: var(--paper); color: var(--ink);
+  font-size: 15px; font-weight: 500; text-decoration: none; cursor: pointer;
+}
+.btn-quiet:disabled { color: var(--faint); cursor: default; }
+
+/* 名前：ことのね を明朝で。 */
+.wordmark-kana { font-family: var(--font-mincho); font-weight: 700; letter-spacing: 0.06em; }
+
+.label { font-size: 13px; font-weight: 600; color: var(--muted); margin: 0; }
+
+/* 漢字の上のハングル（語の読み）。 */
+ruby { ruby-position: over; }
+rt { font-family: var(--font-ko); font-size: 0.42em; font-weight: 400; color: var(--muted); letter-spacing: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
 }

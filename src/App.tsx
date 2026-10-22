@@ -1,23 +1,35 @@
-import { Route, Routes } from "react-router-dom";
+import { createHashRouter, Navigate, useParams } from "react-router-dom";
 import Layout from "./components/Layout";
-import Home from "./pages/Home";
-import AddWord from "./pages/AddWord";
-import WordList from "./pages/WordList";
-import HanjaDex from "./pages/HanjaDex";
+import Collect from "./pages/Collect";
+import Find from "./pages/Find";
+import Words from "./pages/Words";
+import Hanja from "./pages/Hanja";
 import HanjaDetail from "./pages/HanjaDetail";
-import Combine from "./pages/Combine";
+import Me from "./pages/Me";
 
-export default function App() {
-  return (
-    <Routes>
-      <Route element={<Layout />}>
-        <Route path="/" element={<Home />} />
-        <Route path="/add" element={<AddWord />} />
-        <Route path="/words" element={<WordList />} />
-        <Route path="/dex" element={<HanjaDex />} />
-        <Route path="/dex/:char" element={<HanjaDetail />} />
-        <Route path="/combine" element={<Combine />} />
-      </Route>
-    </Routes>
-  );
+/** 前の版の図鑑のアドレス（#/dex/學）は字のページへ。 */
+function OldDexChar() {
+  const { char = "" } = useParams();
+  return <Navigate to={`/hanja/${encodeURIComponent(char)}`} replace />;
 }
+
+// Capacitor の WebView は file:// で動くため、ハッシュのルーターを使う。
+export const router = createHashRouter([
+  {
+    element: <Layout />,
+    children: [
+      { path: "/", element: <Collect /> },
+      { path: "/find", element: <Find /> },
+      { path: "/words", element: <Words /> },
+      { path: "/hanja", element: <Hanja /> },
+      { path: "/hanja/:char", element: <HanjaDetail /> },
+      { path: "/me", element: <Me /> },
+      // 前の版のアドレス
+      { path: "/add", element: <Navigate to="/" replace /> },
+      { path: "/dex", element: <Navigate to="/hanja" replace /> },
+      { path: "/dex/:char", element: <OldDexChar /> },
+      { path: "/combine", element: <Navigate to="/find" replace /> },
+      { path: "*", element: <Navigate to="/" replace /> },
+    ],
+  },
+]);

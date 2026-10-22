@@ -14,9 +14,12 @@ import type { HanjaCharData, WordData } from "./types";
 const curatedChars = curatedCharsJson as HanjaCharData[];
 const curatedWords = curatedWordsJson as WordData[];
 
-/** 文字列を漢字（CJK統合漢字）1文字ずつに分解する。CJK以外は除外。 */
+/**
+ * 文字列を漢字（CJK統合漢字）1文字ずつに分解する。CJK以外は除外。
+ * 互換漢字（年 U+F98E など、読み別の重複コード）は NFC で統合漢字にそろえる（辞書データと同じ扱い）。
+ */
 export function splitHanja(hanja: string): string[] {
-  return Array.from(hanja).filter((ch) => /\p{Script=Han}/u.test(ch));
+  return Array.from(hanja.normalize("NFC")).filter((ch) => /\p{Script=Han}/u.test(ch));
 }
 
 /** 漢字1文字 → 辞書エントリ。 */
@@ -25,18 +28,34 @@ export const charMap: Map<string, HanjaCharData> = new Map();
 export const hangulToWords: Map<string, WordData[]> = new Map();
 /** 漢字1文字 → その字を含む語の一覧（逆引き。組み合わせ・発見で使用）。 */
 export const charToWords: Map<string, WordData[]> = new Map();
+/** 漢字表記 → 語データ（樂 の 락/악 のように読みが分かれる語もあるので配列）。 */
+export const hanjaToWords: Map<string, WordData[]> = new Map();
+/** 日本の字（新字体）→ 韓国の字（旧字体）。学 → [學]。漢字で打った語を引くときに使う。 */
+export const jpToKo: Map<string, string[]> = new Map();
 /** 全語リスト（参照用）。中身は rebuildIndexes で入れ替える。 */
 export const seedWords: WordData[] = [];
 
+function push<K, V>(map: Map<K, V[]>, key: K, value: V) {
+  const list = map.get(key);
+  if (list) list.push(value);
+  else map.set(key, [value]);
+}
+
 function rebuildIndexes(charList: HanjaCharData[], wordList: WordData[]): void {
   charMap.clear();
-  for (const c of charList) charMap.set(c.char, c);
+  jpToKo.clear();
+  for (const c of charList) {
+    charMap.set(c.char, c);
+    if (c.jp && c.jp !== c.char) push(jpToKo, c.jp, c.char);
+  }
 
   hangulToWords.clear();
+  hanjaToWords.clear();
   charToWords.clear();
   seedWords.length = 0;
   for (const w of wordList) {
     seedWords.push(w);
+    push(hanjaToWords, w.hanja, w);
 
     const byHangul = hangulToWords.get(w.hangul);
     if (byHangul) byHangul.push(w);
@@ -79,4 +98,16 @@ export async function initFullDataset(): Promise<void> {
 /** 漢字1文字の辞書エントリを取得（未収録なら undefined）。 */
 export function getCharData(char: string): HanjaCharData | undefined {
   return charMap.get(char);
+}
+
+/** 日本の字（新字体）で書いた表記。字形が同じ字や辞書に無い字はそのまま。例: 會社 → 会社 */
+export function jpForm(hanja: string): string {
+  return Array.from(hanja.normalize("NFC"))
+    .map((c) => charMap.get(c)?.jp ?? c)
+    .join("");
+}
+
+/** 基礎漢字（1800字）の辞書エントリ。全データの読込後に中身がそろう。 */
+export function eduChars(): HanjaCharData[] {
+  return [...charMap.values()].filter((c) => c.edu);
 }

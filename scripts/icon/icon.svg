@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- ことのね のアイコン：ことのあめ と同じ開いた本から、葉（言の葉）が出て、根（言の根）が下へ伸びる。 -->
+  <defs>
+    <radialGradient id="paper" cx="0.35" cy="0.25" r="0.95">
+      <stop offset="0" stop-color="#fffefb"/>
+      <stop offset="1" stop-color="#f9f3e9"/>
+    </radialGradient>
+    <linearGradient id="leafA" x1="1" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#16915f"/>
+      <stop offset="0.55" stop-color="#43c08a"/>
+      <stop offset="1" stop-color="#c2efd9"/>
+    </linearGradient>
+    <linearGradient id="leafB" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#2a86ee"/>
+      <stop offset="0.5" stop-color="#5fb2fd"/>
+      <stop offset="1" stop-color="#d3e8ff"/>
+    </linearGradient>
+    <linearGradient id="stem" gradientUnits="userSpaceOnUse" x1="0" y1="318" x2="0" y2="196">
+      <stop offset="0" stop-color="#16915f"/>
+      <stop offset="1" stop-color="#4fc490"/>
+    </linearGradient>
+    <linearGradient id="pageL" x1="0" y1="0" x2="1" y2="0.6">
+      <stop offset="0" stop-color="#8ccaff"/>
+      <stop offset="1" stop-color="#0a64f0"/>
+    </linearGradient>
+    <linearGradient id="pageR" x1="0" y1="0.6" x2="1" y2="0">
+      <stop offset="0" stop-color="#6a4fe0"/>
+      <stop offset="0.55" stop-color="#b996f6"/>
+      <stop offset="1" stop-color="#fec9a8"/>
+    </linearGradient>
+    <linearGradient id="root" gradientUnits="userSpaceOnUse" x1="0" y1="326" x2="0" y2="458">
+      <stop offset="0" stop-color="#7d62f2"/>
+      <stop offset="0.55" stop-color="#c890f4" stop-opacity="0.8"/>
+      <stop offset="1" stop-color="#f2b5e6" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect id="bg" width="512" height="512" rx="112" fill="url(#paper)"/>
+
+  <g id="art" transform="translate(256 260) scale(1.1) translate(-256 -291)">
+
+  <!-- 根 -->
+  <g fill="none" stroke="url(#root)" stroke-linecap="round">
+    <path d="M256 328 C 254 372, 260 410, 254 456" stroke-width="14"/>
+    <path d="M256 344 C 238 374, 216 400, 206 452" stroke-width="12"/>
+    <path d="M256 344 C 274 374, 296 400, 306 452" stroke-width="12"/>
+    <path d="M230 364 C 204 378, 176 398, 150 432" stroke-width="9"/>
+    <path d="M282 364 C 308 378, 336 398, 362 432" stroke-width="9"/>
+  </g>
+
+  <!-- 開いた本（ことのあめ と同じ色）：外側に厚み、背で一点に。 -->
+  <path d="M256 334 C 220 300, 156 278, 66 268 C 70 282, 76 296, 84 306 C 160 308, 216 320, 256 350 Z" fill="url(#pageL)"/>
+  <path d="M256 334 C 292 300, 356 278, 446 268 C 442 282, 436 296, 428 306 C 352 308, 296 320, 256 350 Z" fill="url(#pageR)"/>
+
+  <!-- 茎と葉 -->
+  <path d="M256 330 V200" stroke="url(#stem)" stroke-width="12" stroke-linecap="round"/>
+  <path d="M256 258 C 248 192, 198 152, 120 156 C 130 226, 186 268, 256 258 Z" fill="url(#leafA)"/>
+  <path d="M256 228 C 266 166, 318 128, 394 130 C 384 198, 330 238, 256 228 Z" fill="url(#leafB)"/>
+  </g>
+</svg>

@@ -3,13 +3,15 @@
 // 公開データから、アプリにバンドルする辞書 JSON を生成する。
 //   入力（scripts/.cache/ に配置。下記 prepare 手順参照）:
 //     - kengdic.tsv             … Korean/English 辞書（surface, hanja, gloss）MPL2.0/LGPL/CC-BY-SA
-//     - Unihan_Readings.txt     … kDefinition（漢字の意味・英語）
+//     - Unihan_Readings.txt     … kDefinition（漢字の意味・英語）, kHangul（韓国の標準の読み・基礎漢字の印）,
+//                                 kJapanese（日本語の音読み・訓読み）
 //     - Unihan_IRGSources.txt   … kTotalStrokes（画数）
 //     - kyujitai.json           … 旧字体↔新字体 対応（npm: kyujitai, MIT）
 //     - src/data/curated-*.json … 手作業キュレーション（音訓・日本語訳）。生成データより優先。
 //   出力:
 //     - public/data/words.json       … 漢字語リスト {hangul, hanja, hanjaJp?, gloss}
-//     - public/data/hanja-chars.json … 漢字テーブル {char, jp?, readings:[{eum,hun?}], meaning, strokes}
+//     - public/data/hanja-chars.json … 漢字テーブル
+//         {char, jp?, readings:[{eum,hun?}], meaning, strokes, edu?, on?, kun?}
 //
 // prepare（ソース取得。raw.githubusercontent はこの環境で不通のため codeload を使用）:
 //   mkdir -p scripts/.cache
@@ -55,7 +57,9 @@ for (let i = 1; i < kengLines.length; i++) {
   const c = kengLines[i].split("\t");
   if (c.length < 4) continue;
   const hangul = c[1];
-  const hanja = c[2];
+  // kengdic は読み別の互換漢字（年 U+F98E =연 など、見た目は同じ別コード）を使うことがある。
+  // NFC で統合漢字にそろえ、同じ字が図鑑で2枚になったり組み合わせで別の字扱いになったりしないようにする。
+  const hanja = c[2].normalize("NFC");
   let gloss = c[3];
   if (!isHangul(hangul) || !isHanja(hanja)) continue;
   if (cp(hangul).length !== cp(hanja).length) continue; // 1音節=1漢字（真の한자어）
@@ -99,6 +103,26 @@ function parseUnihan(file, field) {
 }
 const defMap = parseUnihan("Unihan_Readings.txt", "kDefinition");
 const strokeMap = parseUnihan("Unihan_IRGSources.txt", "kTotalStrokes");
+const hangulMap = parseUnihan("Unihan_Readings.txt", "kHangul"); // "락:0E 악:0N" … 読み:出典
+const japaneseMap = parseUnihan("Unihan_Readings.txt", "kJapanese"); // "ガク カク まなぶ" … 音はカタカナ、訓はひらがな
+
+/** kHangul の読み（出典の印つき）。E は 교육용 기초 한자（中高の基礎漢字1800字）の読み。 */
+function koreanReadings(ch) {
+  const v = hangulMap.get(ch);
+  if (!v) return [];
+  return v.split(" ").map((tok) => {
+    const [eum, src = ""] = tok.split(":");
+    return { eum, edu: src.includes("E") };
+  });
+}
+
+/** 日本語の音読み・訓読み（各3つまで。kJapanese はよく使う読みが先に並ぶ）。 */
+function japaneseReadings(ch) {
+  const toks = (japaneseMap.get(ch) ?? "").split(" ").filter(Boolean);
+  const on = toks.filter((t) => /^[゠-ヿ]+$/.test(t)).slice(0, 3);
+  const kun = toks.filter((t) => /^[぀-ゟ]+$/.test(t)).slice(0, 3);
+  return { on, kun };
+}
 
 // --- 3.5) 旧字体（韓国漢字）→ 新字体（日本漢字）マップ ------------------------
 // kyujitai.json の "kyuji" は [新字体, 旧字体, IVS] の配列。
@@ -133,32 +157,98 @@ function shortDef(def) {
 const curatedChars = JSON.parse(fs.readFileSync(CURATED_CHARS, "utf8"));
 const curatedCharMap = new Map(curatedChars.map((c) => [c.char, c]));
 
+/**
+ * 字の読みの並び。韓国の標準の読み（kHangul、基礎漢字の読みを先頭）のうち辞書の語に出てくるもの、
+ * 続いて辞書で2回以上出てくるほかの読み（年→연 のような頭音法則の形など）。kHangul が無い字は出現数の順。
+ */
+function readingsFor(ch) {
+  const dist = eumCount.get(ch) ?? new Map();
+  const std = koreanReadings(ch);
+  const ordered = [...std.filter((r) => r.edu), ...std.filter((r) => !r.edu)]
+    .filter((r) => r.edu || dist.has(r.eum))
+    .map((r) => r.eum);
+  const byCount = [...dist.entries()].sort((a, b) => b[1] - a[1]);
+  for (const [eum, n] of byCount) {
+    if (ordered.includes(eum) || ordered.includes(withoutSaisiot(eum))) continue;
+    if (ordered.length === 0 || n >= 2) ordered.push(eum);
+  }
+  return ordered.map((eum) => ({ eum }));
+}
+
+/** 사이시옷で付いた받침ㅅを外した音節（등굣길 の 굣 → 교）。ㅅ받침でなければそのまま。 */
+function withoutSaisiot(syllable) {
+  const code = syllable.codePointAt(0) - 0xac00;
+  if (code < 0 || code > 11171 || code % 28 !== 19) return syllable;
+  return String.fromCodePoint(0xac00 + code - 19);
+}
+
+function strokesOf(ch) {
+  const n = strokeMap.has(ch) ? parseInt(strokeMap.get(ch).split(" ")[0], 10) : 0;
+  return Number.isFinite(n) ? n : 0;
+}
+
 const allChars = new Set([...eumCount.keys(), ...curatedCharMap.keys()]);
 const charTable = [];
 for (const ch of allChars) {
-  if (curatedCharMap.has(ch)) {
-    charTable.push(curatedCharMap.get(ch)); // 手作業データ（音訓＋日本語）を優先
+  const generated = readingsFor(ch);
+  const curated = curatedCharMap.get(ch);
+  if (curated) {
+    // 手作業データ（音訓＋日本語）を優先し、辞書に出てくるほかの読みを後ろに足す。
+    const extra = generated.filter((g) => !curated.readings.some((r) => r.eum === g.eum));
+    charTable.push({ ...curated, readings: [...curated.readings, ...extra] });
     continue;
   }
-  const dist = eumCount.get(ch);
-  const readings = dist
-    ? [...dist.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .filter(([, n], idx) => idx === 0 || n >= 2) // 主読み＋出現2回以上の異音
-        .map(([eum]) => ({ eum }))
-    : [];
-  const strokes = strokeMap.has(ch) ? parseInt(strokeMap.get(ch).split(" ")[0], 10) : 0;
-  charTable.push({
-    char: ch,
-    readings,
-    meaning: shortDef(defMap.get(ch)),
-    strokes: Number.isFinite(strokes) ? strokes : 0,
-  });
+  charTable.push({ char: ch, readings: generated, meaning: shortDef(defMap.get(ch)), strokes: strokesOf(ch) });
 }
-// 各漢字に日本の新字体（字形が異なる場合のみ）を付与。
+
+// 基礎漢字（1800字）の印。辞書が異体字で収録している字（強→强、晚→晩 など）は、読みと意味の
+// 書き出しが同じ字に印を移す。辞書の語に出てこない字は、読みだけの項目として足す（手入力で集められる）。
+const charIndex = new Map(charTable.map((c) => [c.char, c]));
+const firstDef = (ch) => (defMap.get(ch) ?? "").split(/[;,] ?/)[0];
+const usage = (ch) => [...(eumCount.get(ch)?.values() ?? [])].reduce((a, b) => a + b, 0);
+let eduMoved = 0;
+let eduAdded = 0;
+for (const ch of hangulMap.keys()) {
+  const eduEum = koreanReadings(ch).filter((r) => r.edu).map((r) => r.eum);
+  if (eduEum.length === 0) continue;
+  if (charIndex.has(ch)) {
+    charIndex.get(ch).edu = true;
+    continue;
+  }
+  const variant = charTable
+    .filter(
+      (c) =>
+        !koreanReadings(c.char).some((r) => r.edu) &&
+        firstDef(c.char) !== "" &&
+        firstDef(c.char) === firstDef(ch) &&
+        c.readings.some((r) => eduEum.includes(r.eum))
+    )
+    .sort((a, b) => usage(b.char) - usage(a.char))[0];
+  if (variant) {
+    variant.edu = true;
+    eduMoved++;
+    continue;
+  }
+  const entry = {
+    char: ch,
+    readings: eduEum.map((eum) => ({ eum })),
+    meaning: shortDef(defMap.get(ch)),
+    strokes: strokesOf(ch),
+    edu: true,
+  };
+  charTable.push(entry);
+  charIndex.set(ch, entry);
+  eduAdded++;
+}
+console.log(`  基礎漢字: ${charTable.filter((c) => c.edu).length} 字（異体字へ移した印 ${eduMoved}・読みだけ足した字 ${eduAdded}）`);
+
+// 各漢字に日本の新字体（字形が異なる場合のみ）と日本語の音訓を付与。
 for (const c of charTable) {
   const jp = kyuToShin.get(c.char);
   if (jp && jp !== c.char) c.jp = jp;
+  const { on, kun } = japaneseReadings(c.char);
+  if (on.length) c.on = on;
+  if (kun.length) c.kun = kun;
 }
 charTable.sort((a, b) => (a.strokes || 99) - (b.strokes || 99) || a.char.localeCompare(b.char));
 

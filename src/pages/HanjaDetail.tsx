@@ -1,189 +1,233 @@
-import { Link, useParams } from "react-router-dom";
-import { useLiveQuery } from "dexie-react-hooks";
-import { db } from "../db";
-import { charToWords, getCharData, splitHanja } from "../data/dataset";
-import HanjaText from "../components/HanjaText";
-import HanjaCard from "../components/HanjaCard";
-import { rarityByStrokes } from "../util/rarity";
-import { StarIcon } from "../components/icons";
-import ScriptToggle from "../components/ScriptToggle";
+import { useMemo, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { discoverWords, nearWords, wordKey } from "../data/combine";
+import { charToWords, getCharData } from "../data/dataset";
+import type { WordData } from "../data/types";
+import { t } from "../copy";
+import { useChars, useWords } from "../util/live";
+import { usePrefs } from "../prefs";
+import { Icon } from "../components/Icon";
+import { SpeakButton } from "../components/SpeakButton";
+import { glossLang, WordRow } from "../components/WordRow";
+import { WordSheet } from "../components/WordSheet";
+import app from "../app.module.css";
+import hs from "../components/hanja.module.css";
+import styles from "./HanjaDetail.module.css";
 
+type Word = Pick<WordData, "hangul" | "hanja" | "gloss">;
+
+const PAGE = 20;
+
+function decode(raw: string) {
+  try {
+    return decodeURIComponent(raw).normalize("NFC");
+  } catch {
+    return raw.normalize("NFC");
+  }
+}
+
+/**
+ * 一つの字：田字格に大きく、韓国語の音と日本語の読みを並べる。この字が入った集めた語、
+ * この字で読める語、あと1字で読める語（この字を集めていなければ「この字があれば読める語」）。
+ */
 export default function HanjaDetail() {
   const params = useParams();
-  const char = decodeURIComponent(params.char ?? "");
+  const char = decode(params.char ?? "");
   const data = getCharData(char);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { script } = usePrefs();
+  const [sheet, setSheet] = useState<Word | null>(null);
 
-  const collectedChars = useLiveQuery(() => db.chars.toArray(), [], []);
-  const ownedWords = useLiveQuery(
-    () => db.words.where("chars").equals(char).toArray(),
-    [char],
-    []
+  const words = useWords();
+  const chars = useChars();
+  const stat = chars && (chars.find((c) => c.char === char) ?? null);
+  const mine = words?.filter((w) => w.chars.includes(char));
+
+  const ownedKeys = useMemo(() => new Set((words ?? []).map(wordKey)), [words]);
+  const collected = useMemo(() => new Set((chars ?? []).map((c) => c.char)), [chars]);
+  const readable = useMemo(
+    () => discoverWords(collected, ownedKeys, true).filter((w) => w.chars.includes(char)),
+    [collected, ownedKeys, char]
+  );
+  const near = useMemo(
+    () => nearWords(collected, ownedKeys).filter((n) => Array.from(n.word.hanja).includes(char)),
+    [collected, ownedKeys, char]
   );
 
-  if (!data) {
-    return (
-      <div className="space-y-4">
-        <Link to="/dex" className="text-sm text-zinc-400">
-          ← 図鑑へ戻る
-        </Link>
-        <p className="text-slate-400">この漢字のデータがありません：{char}</p>
-      </div>
-    );
+  function back() {
+    // ほかの画面から来たなら戻る。直接開いたなら漢字の一覧へ。
+    if (location.key !== "default") navigate(-1);
+    else navigate("/hanja");
   }
 
-  const collectedSet = new Set(collectedChars.map((c) => c.char));
-  const owned = collectedSet.has(char);
-  const stat = collectedChars.find((c) => c.char === char);
-  const ownedHangul = new Set(ownedWords.map((w) => w.hangul));
-  const rarity = rarityByStrokes(data.strokes);
-
-  const candidates = charToWords.get(char) ?? [];
-  const DISCOVER_LIMIT = 40;
-  const discoverAll = candidates
-    .filter((w) => !ownedHangul.has(w.hangul))
-    .map((w) => ({
-      word: w,
-      formable: splitHanja(w.hanja).every((c) => collectedSet.has(c)),
-    }))
-    .sort(
-      (a, b) =>
-        Number(b.formable) - Number(a.formable) || a.word.hangul.localeCompare(b.word.hangul)
-    );
-  const discover = discoverAll.slice(0, DISCOVER_LIMIT);
+  const r = data?.readings[0];
+  const jp = data?.jp && data.jp !== char ? data.jp : null;
+  const glyph = script === "ja" && jp ? jp : char;
+  const meaningJa = data?.meaning ? glossLang(data.meaning) === "ja" : false;
+  const total = charToWords.get(char)?.length ?? 0;
+  const others = Math.max(0, total - (mine?.length ?? 0) - readable.length - near.length);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <Link to="/dex" className="text-sm text-zinc-400 hover:text-zinc-200">
-          ← 図鑑へ戻る
-        </Link>
-        <ScriptToggle />
-      </div>
+    <>
+      <header className={app.subbar}>
+        <button type="button" className={app.iconLink} onClick={back} aria-label={t.common.back}>
+          <Icon name="back" size={22} />
+        </button>
+        <h1 className={`${app.subtitleStrong} ${app.withBack}`}>
+          <span className="hanja">{glyph}</span>
+          {r ? (
+            <span className={`t-ko ${styles.titleEum}`} lang="ko">
+              {r.eum}
+            </span>
+          ) : null}
+        </h1>
+      </header>
 
-      {/* ヒーローカード */}
-      <div className="flex items-center gap-5">
-        <div className="w-32 shrink-0">
-          <HanjaCard char={char} owned={owned} count={stat?.count} size="lg" />
+      {!data ? (
+        <div className={app.bodyTight}>
+          <p className={app.lead}>{t.char.unknown(char)}</p>
         </div>
-        <div className="space-y-2">
-          <div className={`flex items-center gap-1 ${rarity.accentClass}`}>
-            {Array.from({ length: rarity.stars }).map((_, i) => (
-              <StarIcon key={i} size={14} />
-            ))}
-            <span className="ml-1 text-xs font-semibold">{rarity.label}</span>
-          </div>
-          {data.readings.map((r, i) => (
-            <div key={i} className="text-emerald-300">
-              {r.hun && <span className="text-lg font-semibold">{r.hun}</span>}
-              <span className="ml-2 text-lg">{r.eum}</span>
-            </div>
-          ))}
-          {data.meaning && <p className="text-sm text-slate-400">{data.meaning}</p>}
-          <p className="text-xs text-slate-500">
-            {data.strokes ? `${data.strokes} 画` : "画数不明"}
-            {data.jp && data.jp !== char && (
-              <span className="ml-2 text-sky-300">日本字: {data.jp}</span>
-            )}
-            {" · "}
-            {owned ? (
-              <span className="text-amber-300">収集済み（{stat?.count ?? 0} 語）</span>
-            ) : (
-              <span className="text-slate-500">未収集</span>
-            )}
-          </p>
-        </div>
-      </div>
-
-      <Section title="集めた語の中で使われている">
-        {ownedWords.length === 0 ? (
-          <Empty>この漢字を含む語はまだ集めていません。</Empty>
-        ) : (
-          <WordRows
-            rows={ownedWords.map((w) => ({
-              hangul: w.hangul,
-              hanja: w.hanja,
-              hanjaJp: w.hanjaJp,
-              gloss: w.gloss,
-            }))}
-          />
-        )}
-      </Section>
-
-      <Section
-        title={
-          discoverAll.length > DISCOVER_LIMIT
-            ? `この漢字を含む・発見できる語（上位${DISCOVER_LIMIT}件／全${discoverAll.length}件）`
-            : "この漢字を含む・発見できる語"
-        }
-      >
-        {discover.length === 0 ? (
-          <Empty>発見できる語はありません。</Empty>
-        ) : (
-          <ul className="space-y-2">
-            {discover.map(({ word, formable }) => (
-              <li
-                key={word.hangul + word.hanja}
-                className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-2.5"
-              >
+      ) : (
+        <div className={`${app.bodyTight} ${app.split}`}>
+          <div className={`${app.col} ${app.stick}`}>
+            <section className={hs.hero}>
+              <div className={hs.grid}>
+                <span className={`hanja ${hs.gridGlyph}`}>{glyph}</span>
+              </div>
+              <dl className={hs.facts}>
                 <div>
-                  <span className="font-semibold">{word.hangul}</span>
-                  <HanjaText
-                    ko={word.hanja}
-                    jp={word.hanjaJp}
-                    className="ml-2 text-sm text-slate-400"
-                  />
-                  <span className="ml-2 text-xs text-slate-500">{word.gloss}</span>
+                  <dt>{t.char.korean}</dt>
+                  <dd className={styles.eumRow}>
+                    <span className={`t-ko ${hs.eum}`} lang="ko">
+                      {r?.hun ? `${r.hun} ${r.eum}` : r?.eum}
+                      {data.readings.length > 1 ? (
+                        <span className={hs.eumMore}>
+                          {data.readings
+                            .slice(1)
+                            .map((x) => x.eum)
+                            .join("・")}
+                        </span>
+                      ) : null}
+                    </span>
+                    {r ? <SpeakButton text={r.eum} /> : null}
+                  </dd>
                 </div>
-                {formable ? (
-                  <span className="shrink-0 rounded-full bg-amber-400/20 px-2 py-0.5 text-[10px] text-amber-300">
-                    今すぐ作れる
-                  </span>
-                ) : (
-                  <span className="shrink-0 text-[10px] text-slate-600">未収集の字あり</span>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-    </div>
+                {data.on?.length || data.kun?.length ? (
+                  <div>
+                    <dt>{t.char.japanese}</dt>
+                    <dd className={styles.ja}>
+                      {data.on?.length ? (
+                        <span>
+                          <small>{t.char.on}</small>
+                          {data.on.join("・")}
+                        </span>
+                      ) : null}
+                      {data.kun?.length ? (
+                        <span>
+                          <small>{t.char.kun}</small>
+                          {data.kun.join("・")}
+                        </span>
+                      ) : null}
+                    </dd>
+                  </div>
+                ) : null}
+                {jp ? (
+                  <div>
+                    <dt>{script === "ja" ? t.char.koForm : t.char.jpForm}</dt>
+                    <dd className={hs.factJp}>{script === "ja" ? char : jp}</dd>
+                  </div>
+                ) : null}
+              </dl>
+            </section>
+            {data.meaning ? (
+              <div className={styles.meaning}>
+                <span className="label">{meaningJa ? t.char.meaning : t.char.meaningEn}</span>
+                <p lang={meaningJa ? "ja" : "en"}>{data.meaning}</p>
+              </div>
+            ) : null}
+            <div className={hs.tags}>
+              {data.strokes ? <span className={hs.tag}>{t.char.strokes(data.strokes)}</span> : null}
+              {data.edu ? <span className={`${hs.tag} ${hs.tagEdu}`}>{t.char.edu}</span> : null}
+            </div>
+            {stat === undefined ? null : stat ? (
+              <p className={styles.owned}>{t.char.owned(stat.count, stat.firstAddedAt)}</p>
+            ) : (
+              <p className={app.note}>{t.char.notOwned}</p>
+            )}
+          </div>
+
+          <div className={app.col}>
+            {mine && mine.length > 0 ? (
+              <List title={t.char.mine} count={mine.length}>
+                {mine.map((w) => (
+                  <WordRow key={w.id} word={w} meta={t.common.ago(w.addedAt)} onOpen={() => setSheet(w)} />
+                ))}
+              </List>
+            ) : null}
+            {stat ? (
+              <Paged title={t.char.readable} empty={t.char.readableNone} items={readable} render={(w) => (
+                <WordRow key={wordKey(w)} word={w} onOpen={() => setSheet(w)} />
+              )} />
+            ) : null}
+            <Paged title={t.char.near} empty={t.char.nearNone} items={near} render={(n) => (
+              <WordRow
+                key={wordKey(n.word)}
+                word={n.word}
+                missing={n.missing}
+                meta={t.find.missingNote(n.missing)}
+                onOpen={() => setSheet(n.word)}
+              />
+            )} />
+            {others > 0 ? <p className={app.note}>{t.char.others(others)}</p> : null}
+          </div>
+        </div>
+      )}
+      {sheet ? <WordSheet key={wordKey(sheet)} word={sheet} onClose={() => setSheet(null)} /> : null}
+    </>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function List({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {
   return (
     <section>
-      <h2 className="mb-2 text-sm font-semibold text-slate-300">{title}</h2>
-      {children}
+      <div className={app.listHead}>
+        <h2>{title}</h2>
+        <span className={app.count}>{t.common.words(count)}</span>
+      </div>
+      <ul className={app.plainList}>{children}</ul>
     </section>
   );
 }
 
-function Empty({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] p-4 text-center text-sm text-slate-500">
-      {children}
-    </p>
-  );
-}
-
-function WordRows({
-  rows,
+function Paged<T>({
+  title,
+  empty,
+  items,
+  render,
 }: {
-  rows: { hangul: string; hanja: string; hanjaJp?: string; gloss: string }[];
+  title: string;
+  empty: string;
+  items: T[];
+  render: (item: T) => React.ReactNode;
 }) {
+  const [limit, setLimit] = useState(PAGE);
   return (
-    <ul className="space-y-2">
-      {rows.map((w) => (
-        <li
-          key={w.hangul + w.hanja}
-          className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5"
-        >
-          <span className="font-semibold">{w.hangul}</span>
-          <HanjaText ko={w.hanja} jp={w.hanjaJp} className="ml-2 text-sm text-slate-400" />
-          <span className="ml-2 text-xs text-slate-500">{w.gloss}</span>
-        </li>
-      ))}
-    </ul>
+    <section className={styles.paged}>
+      <div className={app.listHead}>
+        <h2>{title}</h2>
+        <span className={app.count}>{t.common.words(items.length)}</span>
+      </div>
+      {items.length === 0 ? (
+        <p className={app.empty}>{empty}</p>
+      ) : (
+        <ul className={app.plainList}>{items.slice(0, limit).map(render)}</ul>
+      )}
+      {items.length > limit ? (
+        <button type="button" className={app.more} onClick={() => setLimit((n) => n + PAGE)}>
+          {t.common.more}（{items.length - limit}）
+        </button>
+      ) : null}
+    </section>
   );
 }
