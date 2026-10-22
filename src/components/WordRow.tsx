@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { splitHanja } from "../data/dataset";
+import { glossText } from "../data/gloss";
 import type { WordData } from "../data/types";
 import { t } from "../copy";
 import styles from "../app.module.css";
@@ -56,7 +57,7 @@ export function WordRow({
           </span>
           {word.gloss ? (
             <span className={styles.wordGloss} lang={glossLang(word.gloss)}>
-              {word.gloss}
+              {glossText(word.gloss)}
             </span>
           ) : null}
           {meta ? <span className={styles.wordMeta}>{meta}</span> : null}

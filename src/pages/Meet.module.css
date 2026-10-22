@@ -36,7 +36,10 @@
   font: inherit; font-size: 16px; cursor: pointer;
 }
 .chip.owned { border-color: var(--again); background: var(--again-tint); }
-.chip.readable { border-color: var(--accent); }
+.chip.readable { border-color: var(--accent); background: var(--tint); }
+/* まだ集めていない語の札：アクセントの破線と、？？ もアクセントの色で。 */
+.chip.new { border-color: var(--accent); border-style: dashed; }
+.chip .chipHanja [aria-hidden="true"] { color: var(--accent); font-weight: 600; }
 .chipHanja { font-size: 14px; color: var(--ink-2); }
 
 @media (prefers-reduced-motion: reduce) {

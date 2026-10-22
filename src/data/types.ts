@@ -38,7 +38,10 @@ export interface WordData {
   hanja: string;
   /** 日本の漢字表記（新字体。字形が異なる場合のみ）。例: 會社→"会社"。同形なら未設定。 */
   hanjaJp?: string;
-  /** 意味（日本語優先、無ければ英語）。例: "学生" */
+  /**
+   * 意味。한국어기초사전 の日本語の対訳があれば「よみ【表記】、…」（例: "じどう【児童】、がくせい【学生】"）、
+   * 無ければ英語。出すときは glossText（伏せている間は maskedGlossText）で。
+   */
   gloss: string;
 }
 

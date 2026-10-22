@@ -10,13 +10,13 @@ Web（PWA）→ iOS の順で展開する計画です（React + Capacitor）。
 
 | タブ | 中身 |
 |---|---|
-| あつめる `/` | 覚えた語を打つ（ハングル、または 學生・学生 のような漢字）。根に分けて見せ、「あつめると読める語が◯語増えます」。あつめると「+◯語」を数え上げで大きく、新しく読めるようになった語、「はじめての字／また出会った字」、前の語とのつながり。増えないうちは「次に出会うと読める語」。辞書に無い語は手で登録（漢字は集めた字の音から組み立てた候補も出す） |
+| あつめる `/` | 覚えた語を打つ（ハングル、または 學生・学生 のような漢字）。根に分けて見せ、「あつめると読める語が◯語増えます」。あつめると「+◯語」を数え上げで大きく、新しく読めるようになった語、「はじめての字／また出会った字」、前の語とのつながり。増えないうちは「次に出会うと読める語」。辞書に無い語は手で登録（漢字は集めた字の音から組み立てた候補も出す）。ふりかえりどきの語があれば、そこへの入口 |
 | 見つける `/find` | 文で出会う（ことのあめ の例文が4文ずつ降ってくる。文の中の漢字語は、集めた語＝紫の点線・集めた字で読める語・まだの語で印が変わり、上に漢字を添えられる。押すとその語が開く）／読んでみる（漢字だけ見せて、字の音をつなげてハングルで打つ。読めたら集まる）／読める語／あと1字で読める語（あつめると +◯語） |
-| ことば `/words` | 集めた語。探す・字数・新しい順／가나다順 |
+| ことば `/words` | 集めた語と覚え具合（あつめた → また出会った → 読めた → 身についた の目盛り）。探す・覚え具合・字数で絞る・新しい順／가나다順。ふりかえりどきの語があれば上に出し、ふりかえる（`?view=review`。ひと回り10語、漢字を見てハングルで打つ。点数は出さない） |
 | 漢字 `/hanja` | 集めた字のカード（根の深さ）、基礎漢字1800字の一覧、集めた字を並べて組み立てる。字のページ `/hanja/:char` は田字格に大きく、韓国語の音・日本語の音訓・日本の字、この字が出てくる文 |
 | 自分 `/me` | これまでの数、表示（字形・アクセント・読み上げの速さ）、書き出し・読み込み、姉妹アプリ、出典 |
 
-語はどこからでもシートで開ける（この語が出てくる文つき）。まだ集めていない語は、漢字を ？？ で伏せて見せる（シートと、文の上に添える漢字）。
+語はどこからでもシートで開ける（この語が出てくる文つき。集めた語には覚え具合の道のりと、次にふりかえる日）。まだ集めていない語は、漢字を ？？ で伏せて見せる（シートと、文の上に添える漢字）。
 ハングルを自分の指で打ってあつめると、答え合わせとして漢字が開き、根が伸びる（ボタン一つでは集めない）。
 
 ## 技術スタック
@@ -47,16 +47,18 @@ src/
   index.css            色・書体のトークン、共通のボタン（.btn / .btn-quiet）
   app.module.css       殻・上のバー・罫線の一覧・絞り込み・見方の切り替え・左右分割（720 / 1024 / 1280 px）
   prefs.tsx            字形（韓国の字・日本の字・両方）、アクセント、読み上げの速さ（localStorage）
-  db.ts                Dexie 定義（v2 で互換漢字を統合漢字にそろえる移行）、収集、書き出し・読み込み
+  db.ts                Dexie 定義（v2 で互換漢字を統合漢字にそろえる移行）、収集、覚え具合の出来事（文で出会った・読めた・答えを見た）、書き出し・読み込み
   data/
     dataset.ts         curated を即時ロード + public/data/* を起動時 fetch。逆引き・日本の字 → 韓国の字
     resolver.ts        ハングル／漢字（新字体も）→ 漢字語。辞書に無い語の漢字を集めた字から組み立てる
     combine.ts         読める語・あと1字で読める語・あつめると読めるようになる語・次に出会うと効く字・組み立て
+    stage.ts           覚え具合の段階と次にふりかえる日（語に残した出来事から毎回求める）
+    gloss.ts           語の意味の書き方（よみ【表記】。ふだんは表記、まだ集めていない語では語の字が入った対訳だけ よみ）
     reading.ts         読んでみる の答え合わせ（音節ごと、字のふだんの音とこの語での音の違い）と出す語の選び方
-    sentences.ts       文で出会う の例文（使う画面で一度だけ読む）、印の語の見分け、ひと雨の選び方、音声の場所
-  components/          BottomNav / Logo / Icon / Sheet / WordSheet / Roots（根に分けた並び）/ CharCard / …
-  pages/               Collect / Find（Meet＝文で出会う、TryRead＝読んでみる）/ Words / Hanja（Build＝組み立てる）/ HanjaDetail / Me
-public/data/           生成された辞書（words.json 約16,600語 / hanja-chars.json 約3,400字）と例文（sentences.json）
+    sentences.ts       文で出会う の例文（使う画面で一度だけ読む）、印の語の見分け、ひと雨の選び方（ふりかえりどきの語の文を先に）、音声の場所
+  components/          BottomNav / Logo / Icon / Sheet / WordSheet / Roots（根に分けた並び）/ Stage（覚え具合の目盛りと道のり）/ CharCard / …
+  pages/               Collect / Find（Meet＝文で出会う、TryRead＝読んでみる）/ Words（Review＝ふりかえる）/ Hanja（Build＝組み立てる）/ HanjaDetail / Me
+public/data/           生成された辞書（words.json 約21,200語・約9割に日本語の意味 / hanja-chars.json 約3,400字）と例文（sentences.json）
 public/icons/          アプリアイコン（scripts/icon から書き出し）
 scripts/
   build-data.mjs       kengdic + Unihan + kyujitai + curated → public/data/words.json・hanja-chars.json を生成
@@ -78,6 +80,13 @@ unzip -j /tmp/k.zip '*/kengdic.tsv' -d scripts/.cache
 curl -L -o /tmp/uh.zip https://www.unicode.org/Public/UCD/latest/ucd/Unihan.zip
 unzip -j /tmp/uh.zip Unihan_Readings.txt Unihan_IRGSources.txt -d scripts/.cache
 curl -L -o scripts/.cache/kyujitai.json https://unpkg.com/kyujitai@1.3.0/data/kyujitai.json
+# 語の日本語の意味：한국어기초사전（2019年の全体 XML の写し）と JMdict（jmdict-simplified）
+mkdir -p scripts/.cache/krdict scripts/.cache/jmdict
+for n in 5000 10000 15000 20000 25000 30000 35000 40000 45000 50000 51947; do
+  curl -L -o scripts/.cache/krdict/$n.xml https://github.com/spellcheck-ko/korean-dict-nikl-krdict/raw/master/$n.xml
+done
+curl -L -o /tmp/jm.tgz "https://github.com/scriptin/jmdict-simplified/releases/download/3.6.2%2B20261019180022/jmdict-eng-3.6.2%2B20261019180022.json.tgz"
+tar -xzf /tmp/jm.tgz -C scripts/.cache/jmdict
 
 # 2) 生成
 npm run build:data
@@ -87,6 +96,9 @@ npm run build:data
   韓国の標準の読み（Unihan kHangul）を先に、頭音法則の形（年 → 연）を後ろに。
 - 基礎漢字1800字（교육용 기초 한자）の印は kHangul の E。辞書が異体字で収録している字（強 → 强 など）は、読みと意味が同じ字に印を移す。
 - 日本語の音読み・訓読みは Unihan kJapanese（よく使う読みから3つまで）。
+- 語の意味は 한국어기초사전 の日本語の対訳 → 手作業の日本語訳 → JMdict の日本語の同じ漢字の語 → kengdic の英語 の順。
+  日本語は「よみ【表記】、…」の形で持ち（例: じどう【児童】、がくせい【学生】）、ふだんは表記を、まだ集めていない語では
+  語の字が入った対訳だけ よみ を出す（`src/data/gloss.ts`）。集めてある語の意味は、起動して辞書を読んだあとにいまの辞書にそろえる。
 
 出典・ライセンスは [NOTICE.md](./NOTICE.md) を参照（kengdic: MPL2.0/LGPL/CC-BY-SA、Unihan: Unicode License）。
 
@@ -123,7 +135,7 @@ node scripts/build-sentences.mjs --kotonoame <ことのあめ のリポジトリ
 
 ## ロードマップ
 
-- **Phase 1（現在）**: Web — あつめる / 見つける / ことば / 漢字 / 自分、端末内保存、約16,500語の辞書、書き出し・読み込み
-- **Phase 2**: 国立国語院 Open API による未収録語のオンライン解決＋日本語訳
+- **Phase 1（現在）**: Web — あつめる / 見つける / ことば（覚え具合・ふりかえる）/ 漢字 / 自分、端末内保存、約21,200語の辞書（意味は日本語）、書き出し・読み込み
+- **Phase 2**: 国立国語院 Open API による未収録語のオンライン解決
 - **Phase 3**: Capacitor で iOS 化（`npx cap add ios`）、App Store 準備
 - **Phase 4（任意）**: アカウント＆クラウド同期、ことのあめ との行き来

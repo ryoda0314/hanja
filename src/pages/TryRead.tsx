@@ -2,14 +2,19 @@ import { useEffect, useState, type FormEvent } from "react";
 import { wordKey, type DiscoverResult } from "../data/combine";
 import { getCharData, jpForm, splitHanja } from "../data/dataset";
 import { compareSyllables, isSameReading, pickToRead, readingNotes } from "../data/reading";
+import { glossText } from "../data/gloss";
+import { enrich } from "../data/resolver";
+import { wordStage, type Stage } from "../data/stage";
+import type { WordData } from "../data/types";
 import { t } from "../copy";
-import { addWord, db, removeWord } from "../db";
+import { addWord, db, recordRead, removeWord } from "../db";
 import { RATES, usePrefs } from "../prefs";
 import { speak, useKoreanVoice } from "../util/speech";
 import HanjaText from "../components/HanjaText";
 import { Icon } from "../components/Icon";
 import { Roots, rootNotes } from "../components/Roots";
 import { SpeakButton } from "../components/SpeakButton";
+import { StageGauge } from "../components/Stage";
 import { glossLang } from "../components/WordRow";
 import app from "../app.module.css";
 import styles from "./TryRead.module.css";
@@ -58,12 +63,27 @@ export function TryRead({ pool, onNear }: { pool: DiscoverResult[]; onNear: () =
     );
   }
 
-  return <Card key={wordKey(current)} word={current} focus={seen.size > 0} onNext={next} />;
+  return <ReadCard key={wordKey(current)} word={current} mode="new" focus={seen.size > 0} onNext={next} />;
 }
 
 type Phase = "ask" | "answer" | "read";
 
-function Card({ word, focus, onNext }: { word: DiscoverResult; focus: boolean; onNext: () => void }) {
+/**
+ * 漢字だけ見せて、字の音をつなげてハングルで読むカード。
+ * new：まだ集めていない語。読めたら（打てたら）集まり、答えを見ずに読めたら「読めた」から始まる。
+ * review：集めた語のふりかえり。答えを見ずに読めたら覚え具合が進み、答えを見たらあすまた出てくる。
+ */
+export function ReadCard({
+  word,
+  mode,
+  focus,
+  onNext,
+}: {
+  word: Pick<WordData, "hangul" | "hanja" | "gloss">;
+  mode: "new" | "review";
+  focus: boolean;
+  onNext: () => void;
+}) {
   const { script, rate } = usePrefs();
   const voice = useKoreanVoice();
   const chars = splitHanja(word.hanja);
@@ -77,6 +97,8 @@ function Card({ word, focus, onNext }: { word: DiscoverResult; focus: boolean; o
   // 答えを見ずに読めたか（読めました と言えるのはこのときだけ）。
   const [firstTry, setFirstTry] = useState(false);
   const [undone, setUndone] = useState(false);
+  // 答えを見ずに読めたあとの覚え具合（読めた・身についた）。
+  const [stageAfter, setStageAfter] = useState<Stage | null>(null);
   const notes = readingNotes(word.hangul, word.hanja);
   const jp = jpForm(word.hanja);
 
@@ -84,13 +106,22 @@ function Card({ word, focus, onNext }: { word: DiscoverResult; focus: boolean; o
     e.preventDefault();
     if (!typed.trim()) return;
     if (isSameReading(typed, word.hangul)) {
-      const counts = await Promise.all(chars.map((c) => db.chars.get(c).then((x) => x?.count ?? 0)));
-      await addWord(word);
-      setBefore(counts);
-      setFirstTry(phase === "ask");
+      const ok = phase === "ask";
+      if (mode === "new") {
+        const counts = await Promise.all(chars.map((c) => db.chars.get(c).then((x) => x?.count ?? 0)));
+        await addWord(enrich(word, "seed"));
+        setBefore(counts);
+      }
+      if (ok) {
+        await recordRead(word, true);
+        const saved = await db.words.get({ hangul: word.hangul, hanja: word.hanja.normalize("NFC") });
+        if (saved) setStageAfter(wordStage(saved));
+      }
+      setFirstTry(ok);
       setPhase("read");
       if (voice) void speak(word.hangul, voice, RATES[rate]);
     } else if (phase === "ask") {
+      if (mode === "review") void recordRead(word, false);
       setMissed(typed);
       setTyped("");
       setPhase("answer");
@@ -100,6 +131,7 @@ function Card({ word, focus, onNext }: { word: DiscoverResult; focus: boolean; o
   }
 
   function reveal() {
+    if (mode === "review") void recordRead(word, false);
     setMissed(null);
     setPhase("answer");
   }
@@ -118,7 +150,7 @@ function Card({ word, focus, onNext }: { word: DiscoverResult; focus: boolean; o
     <section className={styles.wrap} aria-live="polite">
       {phase === "ask" ? (
         <>
-          <p className={app.lead}>{t.read.lead}</p>
+          <p className={app.lead}>{mode === "review" ? t.review.lead : t.read.lead}</p>
           <div className={styles.card}>
             <ol className={styles.glyphs}>
               {chars.map((c, i) => {
@@ -154,11 +186,22 @@ function Card({ word, focus, onNext }: { word: DiscoverResult; focus: boolean; o
           {phase === "read" ? (
             <p className={styles.success}>
               <Icon name="check" size={18} />
-              {firstTry ? t.read.read : t.collect.collectedTitle(word.hangul)}
+              {mode === "review"
+                ? firstTry
+                  ? t.review.read
+                  : t.review.missed
+                : firstTry
+                  ? t.read.read
+                  : t.collect.collectedTitle(word.hangul)}
             </p>
           ) : (
             <p className="label">{missed ? t.read.missed : t.read.shown}</p>
           )}
+          {phase === "read" && stageAfter ? (
+            <p className={styles.stageAfter}>
+              <StageGauge stage={stageAfter} />
+            </p>
+          ) : null}
           <div className={styles.answer}>
             <div className={styles.names}>
               <span className={`${styles.big} t-ko`} lang="ko">
@@ -179,7 +222,7 @@ function Card({ word, focus, onNext }: { word: DiscoverResult; focus: boolean; o
           ) : null}
           {word.gloss ? (
             <p className={styles.gloss} lang={glossLang(word.gloss)}>
-              {word.gloss}
+              {glossText(word.gloss)}
             </p>
           ) : null}
           <Roots hangul={word.hangul} hanja={word.hanja} notes={before ? rootNotes(before) : undefined} grow={phase === "read"} />
@@ -195,14 +238,16 @@ function Card({ word, focus, onNext }: { word: DiscoverResult; focus: boolean; o
 
       {phase === "read" ? (
         <>
-          <p className={app.note}>
-            {undone ? t.read.undone : t.read.collected}
-            {undone ? null : (
-              <button type="button" className={styles.quiet} onClick={undo}>
-                {t.read.undo}
-              </button>
-            )}
-          </p>
+          {mode === "new" ? (
+            <p className={app.note}>
+              {undone ? t.read.undone : t.read.collected}
+              {undone ? null : (
+                <button type="button" className={styles.quiet} onClick={undo}>
+                  {t.read.undo}
+                </button>
+              )}
+            </p>
+          ) : null}
           <button type="button" className="btn" onClick={onNext} autoFocus>
             {t.read.next}
           </button>
@@ -211,7 +256,7 @@ function Card({ word, focus, onNext }: { word: DiscoverResult; focus: boolean; o
         <>
           <form className={styles.form} onSubmit={submit}>
             <label htmlFor="read-input" className="label">
-              {phase === "ask" ? t.read.label : t.read.retype}
+              {phase === "ask" ? t.read.label : mode === "review" ? t.review.retype : t.read.retype}
             </label>
             <div className={styles.row}>
               <input
@@ -230,7 +275,7 @@ function Card({ word, focus, onNext }: { word: DiscoverResult; focus: boolean; o
                 autoFocus={focus}
               />
               <button type="submit" className="btn" disabled={!typed.trim()}>
-                {phase === "ask" ? t.read.submit : t.read.retypeSubmit}
+                {phase === "ask" ? t.read.submit : mode === "review" ? t.review.retypeSubmit : t.read.retypeSubmit}
               </button>
             </div>
             {retypeWrong ? (
@@ -256,7 +301,7 @@ function Card({ word, focus, onNext }: { word: DiscoverResult; focus: boolean; o
               </>
             ) : null}
             <button type="button" className={styles.small} onClick={onNext}>
-              {phase === "ask" ? t.read.skip : t.read.next}
+              {phase === "ask" ? (mode === "review" ? t.review.skip : t.read.skip) : t.read.next}
             </button>
           </div>
         </>

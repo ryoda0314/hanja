@@ -76,11 +76,11 @@ let fullLoaded = false;
 
 /**
  * public/data/*.json（全データ）を取得してインデックスを再構築する。
- * 取得に失敗した場合は curated データのまま継続する（オフライン耐性）。
+ * 取得に失敗した場合は curated データのまま継続する（オフライン耐性）。読めたら true。
  * ブラウザ実行時にアプリ起動で一度だけ呼ぶ。
  */
-export async function initFullDataset(): Promise<void> {
-  if (fullLoaded) return;
+export async function initFullDataset(): Promise<boolean> {
+  if (fullLoaded) return true;
   const baseRaw = (import.meta as { env?: { BASE_URL?: string } }).env?.BASE_URL ?? "/";
   const base = baseRaw.endsWith("/") ? baseRaw : baseRaw + "/";
   try {
@@ -93,6 +93,7 @@ export async function initFullDataset(): Promise<void> {
   } catch (e) {
     console.warn("全データの読込に失敗しました。収録語のみで動作します。", e);
   }
+  return fullLoaded;
 }
 
 /** 漢字1文字の辞書エントリを取得（未収録なら undefined）。 */

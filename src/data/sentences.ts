@@ -97,16 +97,29 @@ export function markStatus(
   return chars.length > 0 && chars.every((c) => collected.has(c)) ? "readable" : "new";
 }
 
-/** 文の点：集めた語ほど高く（また出会う）、読める語、知っている字の入った語の順。 */
-export function sentenceScore(s: Sentence, collected: Set<string>, owned: Set<string>): number {
+const NONE: ReadonlySet<string> = new Set();
+
+/**
+ * 文の点：集めた語ほど高く（また出会う）、読める語、知っている字の入った語の順。
+ * ふりかえりどきの集めた語（due）はもう少し高く、文の中でまた出会いやすくする。
+ */
+export function sentenceScore(s: Sentence, collected: Set<string>, owned: Set<string>, due: ReadonlySet<string> = NONE): number {
   let score = 0;
   for (const m of s.marks) {
     const status = markStatus(m, collected, owned);
-    if (status === "owned") score += 3;
+    if (status === "owned") score += due.has(key(m.hangul, m.hanja)) ? 5 : 3;
     else if (status === "readable") score += 2;
     else if (splitHanja(m.hanja).some((c) => collected.has(c))) score += 1;
   }
   return score;
+}
+
+export interface RainOptions {
+  /** ひと雨の文の数。 */
+  size?: number;
+  /** ふりかえりどきの集めた語（hangul|hanja）。 */
+  due?: ReadonlySet<string>;
+  random?: () => number;
 }
 
 /**
@@ -118,8 +131,7 @@ export function pickRain(
   collected: Set<string>,
   owned: Set<string>,
   seen: Set<number>,
-  size = 4,
-  random: () => number = Math.random
+  { size = 4, due = NONE, random = Math.random }: RainOptions = {}
 ): Sentence[] {
   let pool = list.filter((s) => !seen.has(s.id));
   if (pool.length < size) pool = [...list];
@@ -129,7 +141,7 @@ export function pickRain(
     [pool[i], pool[j]] = [pool[j], pool[i]];
   }
   const scored = pool
-    .map((s) => ({ s, score: sentenceScore(s, collected, owned) }))
+    .map((s) => ({ s, score: sentenceScore(s, collected, owned, due) }))
     .sort((a, b) => b.score - a.score)
     .slice(0, Math.max(size * 4, 16));
   const out: Sentence[] = [];

@@ -8,17 +8,17 @@
 }
 .mark:hover { background: var(--surface); }
 .mark:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-/* 集めた語：また出会った（ことのあめ の メモした語 と同じ紫の点線）。 */
+/* 集めた語：また出会った（ことのあめ の メモした語 と同じ紫の点線）。もう持っている語なので控えめに。 */
 .owned { text-decoration-style: dotted; text-decoration-color: var(--again); }
 .owned rt { color: var(--again); }
-/* 集めた字だけで読める語。 */
-.readable { text-decoration-color: var(--accent); }
-.readable rt { color: var(--accent); }
-/* まだの語。 */
-.new { text-decoration-color: var(--line-2); text-decoration-thickness: 1.5px; }
-.target { background: var(--tint); }
+/* まだ集めていない語：押して打つとあつまる。アクセントのはっきりした線と、上の ？？ で目立たせる。 */
+.new, .readable { text-decoration-color: var(--accent); text-decoration-thickness: 2.5px; }
+/* そのうち集めた字だけでできた語は、地の色も敷く（漢字の見当がつく）。 */
+.readable { background: var(--tint); padding: 0 0.1em; }
 /* まだ集めていない語の漢字（？ で伏せる）。 */
-.ko rt.rtMasked { color: var(--faint); }
+.ko rt.rtMasked { color: var(--accent); font-weight: 600; }
+/* シートの例文で、開いている語そのもの。 */
+.target { font-weight: 700; background: var(--tint); }
 
 .glossMark { background: var(--tint); color: var(--accent); border-radius: 0.15em; padding: 0 0.1em; }
 

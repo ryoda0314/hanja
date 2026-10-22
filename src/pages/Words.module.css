@@ -12,3 +12,9 @@
   .toolRow { flex-direction: row; align-items: center; justify-content: space-between; }
   .sort { align-self: auto; flex-shrink: 0; }
 }
+
+/* ふりかえりどきの語 */
+.due { gap: 8px; }
+.dueTitle { margin: 0; font-size: 16px; font-weight: 600; }
+.dueStart { align-self: flex-start; margin-top: 6px; }
+.footnote { margin: 16px 0 0; font-size: 12px; line-height: 1.7; color: var(--faint); }

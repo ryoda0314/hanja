@@ -45,6 +45,10 @@ describe("markStatus / sentenceScore", () => {
     expect(sentenceScore(d.list[0], collected, owned)).toBe(2);
     expect(sentenceScore(d.list[2], collected, owned)).toBe(0);
   });
+
+  it("ふりかえりどきの集めた語は、もう少し高い", () => {
+    expect(sentenceScore(d.list[1], collected, owned, new Set(["학생|學生"]))).toBe(5);
+  });
 });
 
 describe("pickRain", () => {
@@ -53,13 +57,20 @@ describe("pickRain", () => {
   const collected = new Set(["學", "生", "大"]);
 
   it("点の高い文から選ぶ", () => {
-    const got = pickRain(d.list, collected, owned, new Set(), 2, () => 0.5);
+    const got = pickRain(d.list, collected, owned, new Set(), { size: 2, random: () => 0.5 });
     expect(got.map((s) => s.id)).toEqual([1, 0]);
   });
 
   it("出した文は避け、足りなければまた使う", () => {
-    expect(pickRain(d.list, collected, owned, new Set([1]), 1, () => 0.5).map((s) => s.id)).toEqual([0]);
-    expect(pickRain(d.list, collected, owned, new Set([0, 1, 2]), 2, () => 0.5)).toHaveLength(2);
+    expect(pickRain(d.list, collected, owned, new Set([1]), { size: 1, random: () => 0.5 }).map((s) => s.id)).toEqual([0]);
+    expect(pickRain(d.list, collected, owned, new Set([0, 1, 2]), { size: 2, random: () => 0.5 })).toHaveLength(2);
+  });
+
+  it("ふりかえりどきの語の入った文を先に", () => {
+    const both = new Set(["학생|學生", "대학|大學"]);
+    expect(pickRain(d.list, collected, both, new Set(), { size: 1, random: () => 0.5 }).map((s) => s.id)).toEqual([0]);
+    const due = new Set(["학생|學生"]);
+    expect(pickRain(d.list, collected, both, new Set(), { size: 1, due, random: () => 0.5 }).map((s) => s.id)).toEqual([1]);
   });
 });
 
@@ -102,7 +113,7 @@ describe("pickRain（同じ語の重なり）", () => {
       ] as { ko: string; ja: string; w: [number, number, string][] }[],
     });
     const owned = new Set(["시간|時間"]);
-    const got = pickRain(many.list, new Set(["時", "間"]), owned, new Set(), 3, () => 0.5);
+    const got = pickRain(many.list, new Set(["時", "間"]), owned, new Set(), { size: 3, random: () => 0.5 });
     expect(got.filter((s) => s.ko.startsWith("시간"))).toHaveLength(2);
     expect(got.map((s) => s.ko)).toContain("가족 여행");
   });

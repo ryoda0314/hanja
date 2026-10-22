@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { discoverWords, nearWords, unlockedBy, unlockers, wordKey } from "../data/combine";
 import { getCharData } from "../data/dataset";
+import { dueWords } from "../data/stage";
 import type { WordData } from "../data/types";
 import { t } from "../copy";
 import { useChars, useSentences, useWords } from "../util/live";
@@ -35,6 +36,7 @@ export default function Find() {
   const collected = useMemo(() => new Set((chars ?? []).map((c) => c.char)), [chars]);
   const readable = useMemo(() => discoverWords(collected, ownedKeys, true), [collected, ownedKeys]);
   const near = useMemo(() => nearWords(collected, ownedKeys), [collected, ownedKeys]);
+  const due = useMemo(() => new Set(dueWords(words ?? [], Date.now()).map(wordKey)), [words]);
 
   function show(next: View) {
     setParams(next === "meet" ? {} : { view: next }, { replace: true });
@@ -61,7 +63,7 @@ export default function Find() {
               ) : sentences === null ? (
                 <p className={app.error}>{t.meet.failed}</p>
               ) : (
-                <Meet data={sentences} collected={collected} owned={ownedKeys} onOpen={setSheet} />
+                <Meet data={sentences} collected={collected} owned={ownedKeys} due={due} onOpen={setSheet} />
               )
             ) : null}
             {view === "read" ? <TryRead pool={readable} onNear={() => show("near")} /> : null}

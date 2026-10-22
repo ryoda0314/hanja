@@ -1,7 +1,8 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { useMemo, useState, type FormEvent } from "react";
 import { unlockedBy, wordKey } from "../data/combine";
-import { jpForm, splitHanja } from "../data/dataset";
+import { splitHanja } from "../data/dataset";
+import { glossText, maskedGlossText } from "../data/gloss";
 import { isSameReading, readingNotes } from "../data/reading";
 import { enrich } from "../data/resolver";
 import { wordOf } from "../data/sentences";
@@ -16,6 +17,7 @@ import { Roots, rootNotes } from "./Roots";
 import { SentenceRows } from "./SentenceView";
 import { Sheet } from "./Sheet";
 import { SpeakButton } from "./SpeakButton";
+import { StageTrack } from "./Stage";
 import { glossLang, MaskedHanja, WordRow } from "./WordRow";
 import styles from "./WordSheet.module.css";
 
@@ -78,8 +80,8 @@ function Body({
   );
   const fresh = new Set(splitHanja(hanja).filter((c) => !collected.has(c))).size;
   const notes = readingNotes(word.hangul, hanja);
-  // 意味の訳に漢字そのものが書いてあれば（学生 など）、集めるまで伏せる。
-  const glossSpoils = [...splitHanja(hanja), ...splitHanja(jpForm(hanja))].some((c) => word.gloss.includes(c));
+  // 意味の対訳に語の字が入っていれば（学生 など）、集めるまでは よみ で（がくせい）。
+  const gloss = masked ? maskedGlossText(word.gloss, hanja) : glossText(word.gloss);
   const sentences = useSentences();
   const sentenceIds = useMemo(
     () => (sentences?.byWord.get(`${word.hangul}|${hanja}`) ?? []).slice(0, 3),
@@ -145,9 +147,9 @@ function Body({
         </div>
         <SpeakButton text={word.hangul} size="lg" />
       </div>
-      {word.gloss && !(masked && glossSpoils) ? (
-        <p className={styles.gloss} lang={glossLang(word.gloss)}>
-          {word.gloss}
+      {gloss ? (
+        <p className={styles.gloss} lang={glossLang(gloss)}>
+          {gloss}
         </p>
       ) : null}
 
@@ -184,6 +186,10 @@ function Body({
               </ul>
             </section>
           ) : null}
+          <section className={styles.section}>
+            <h3 className="label">{t.stage.label}</h3>
+            <StageTrack word={owned} now={Date.now()} />
+          </section>
           <section className={styles.section}>
             <h3 className="label">{t.sheet.linked}</h3>
             {linked === undefined ? null : linked.length === 0 ? (

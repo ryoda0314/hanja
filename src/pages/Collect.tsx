@@ -2,6 +2,8 @@ import { useMemo, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { discoverWords, unlockedBy, wordKey } from "../data/combine";
 import { splitHanja } from "../data/dataset";
+import { dueWords } from "../data/stage";
+import { glossText } from "../data/gloss";
 import { guessHanja, isHanjaInput, resolveByHanja, resolveLocalAll, resolveManual } from "../data/resolver";
 import type { ResolvedWord, WordData } from "../data/types";
 import { t } from "../copy";
@@ -51,6 +53,7 @@ export default function Collect() {
     () => (collected.size ? discoverWords(collected, ownedKeys, true) : []),
     [collected, ownedKeys]
   );
+  const due = useMemo(() => dueWords(words ?? [], Date.now()).length, [words]);
 
   function resolve(e: FormEvent) {
     e.preventDefault();
@@ -172,17 +175,33 @@ export default function Collect() {
 
           {words === undefined ? null : hasWords ? (
             <>
-              {readable.length > 0 ? (
-                <Link to="/find" className={styles.readable}>
-                  <span className={styles.readableText}>
-                    <span className={styles.readableTitle}>{t.collect.readable(readable.length)}</span>
-                    <span className={app.note}>{t.collect.readableNote}</span>
-                  </span>
-                  <span className={styles.readableAction}>
-                    {t.collect.readableAction}
-                    <Icon name="arrow" size={18} />
-                  </span>
-                </Link>
+              {readable.length > 0 || due > 0 ? (
+                <div className={styles.cards}>
+                  {readable.length > 0 ? (
+                    <Link to="/find" className={styles.readable}>
+                      <span className={styles.readableText}>
+                        <span className={styles.readableTitle}>{t.collect.readable(readable.length)}</span>
+                        <span className={app.note}>{t.collect.readableNote}</span>
+                      </span>
+                      <span className={styles.readableAction}>
+                        {t.collect.readableAction}
+                        <Icon name="arrow" size={18} />
+                      </span>
+                    </Link>
+                  ) : null}
+                  {due > 0 ? (
+                    <Link to="/words?view=review" className={styles.readable}>
+                      <span className={styles.readableText}>
+                        <span className={styles.readableTitle}>{t.review.panel(due)}</span>
+                        <span className={app.note}>{t.review.homeNote}</span>
+                      </span>
+                      <span className={styles.readableAction}>
+                        {t.review.start}
+                        <Icon name="arrow" size={18} />
+                      </span>
+                    </Link>
+                  ) : null}
+                </div>
               ) : null}
               <section>
                 <div className={app.listHead}>
@@ -233,7 +252,7 @@ function Names({ word }: { word: Pick<WordData, "hangul" | "hanja" | "gloss"> })
       </div>
       {word.gloss ? (
         <p className={styles.gloss} lang={glossLang(word.gloss)}>
-          {word.gloss}
+          {glossText(word.gloss)}
         </p>
       ) : null}
     </>

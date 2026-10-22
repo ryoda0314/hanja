@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { audioUrl, markStatus, pickRain, wordOf, type MarkStatus, type Sentence, type SentenceData } from "../data/sentences";
 import type { WordData } from "../data/types";
 import { t } from "../copy";
+import { recordMet } from "../db";
 import { MarkLegend, SentenceView } from "../components/SentenceView";
 import { SpeakButton } from "../components/SpeakButton";
 import HanjaText from "../components/HanjaText";
@@ -17,29 +18,34 @@ const SEEN = "seenSentences";
 /**
  * 文で出会う：姉妹アプリ ことのあめ の例文が、ひと雨4文ずつ降ってくる。集めた字の入った文ほど降りやすい。
  * 文の中の漢字語は、集めた語（また出会った）・集めた字で読める語・まだの語で印が変わり、押すとその語が開く。
- * 自分から語を持ってこなくても、自分の根が文の中で見つかる。
+ * 自分から語を持ってこなくても、自分の根が文の中で見つかる。ふりかえりどきの集めた語（due）の入った文は降りやすい。
  */
 export function Meet({
   data,
   collected,
   owned,
+  due,
   onOpen,
 }: {
   data: SentenceData;
   collected: Set<string>;
   owned: Set<string>;
+  due: ReadonlySet<string>;
   onOpen: (w: Word) => void;
 }) {
   const [showHanja, setShowHanja] = usePref("meetHanja", true);
   const [hideGloss, setHideGloss] = usePref("meetHideGloss", false);
   const [round, setRound] = useState(0);
-  const [rain, setRain] = useState<Sentence[]>(() => pickRain(data.list, collected, owned, readSeen(SEEN)));
+  const [rain, setRain] = useState<Sentence[]>(() => pickRain(data.list, collected, owned, readSeen(SEEN), { due }));
 
-  // 降った文は覚えておき、次の雨では別の文を。
-  useEffect(() => addSeen(SEEN, rain.map((s) => s.id)), [rain]);
+  // 降った文は覚えておき、次の雨では別の文を。集めた語が入っていれば、また出会った（一日一度だけ数える）。
+  useEffect(() => {
+    addSeen(SEEN, rain.map((s) => s.id));
+    void recordMet(rain.flatMap((s) => s.marks).filter((m) => owned.has(`${m.hangul}|${m.hanja}`)));
+  }, [rain]);
 
   function next() {
-    setRain(pickRain(data.list, collected, owned, readSeen(SEEN)));
+    setRain(pickRain(data.list, collected, owned, readSeen(SEEN), { due }));
     setRound((r) => r + 1);
     window.scrollTo({ top: 0 });
   }

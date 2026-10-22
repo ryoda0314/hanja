@@ -24,6 +24,8 @@ const SWATCH: Record<AccentPref, string> = {
 const SISTER_URL = "https://polylinga.app";
 
 const CREDITS = [
+  { name: "한국어기초사전", by: "国立国語院", license: "CC BY-SA 2.0 KR", url: "https://krdict.korean.go.kr" },
+  { name: "JMdict", by: "Electronic Dictionary Research and Development Group", license: "CC BY-SA 4.0", url: "https://www.edrdg.org/" },
   { name: "kengdic", by: "Joe Speigle / Nathan Glenn", license: "CC BY-SA 3.0", url: "https://github.com/garfieldnate/kengdic" },
   { name: "Unihan Database", by: "Unicode, Inc.", license: "Unicode License v3", url: "https://www.unicode.org/charts/unihan.html" },
   { name: "kyujitai", by: "hakatashi", license: "MIT", url: "https://github.com/hakatashi/kyujitai.js" },

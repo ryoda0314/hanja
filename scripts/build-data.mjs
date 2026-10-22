@@ -7,6 +7,8 @@
 //                                 kJapanese（日本語の音読み・訓読み）
 //     - Unihan_IRGSources.txt   … kTotalStrokes（画数）
 //     - kyujitai.json           … 旧字体↔新字体 対応（npm: kyujitai, MIT）
+//     - krdict/*.xml            … 한국어기초사전（国立国語院、CC BY-SA 2.0 KR）。語の日本語の対訳を取る
+//     - jmdict/jmdict-eng-*.json … JMdict（EDRDG、CC BY-SA 4.0。jmdict-simplified の JSON）。日本語にも同じ漢字の語があるか
 //     - src/data/curated-*.json … 手作業キュレーション（音訓・日本語訳）。生成データより優先。
 //   出力:
 //     - public/data/words.json       … 漢字語リスト {hangul, hanja, hanjaJp?, gloss}
@@ -20,6 +22,13 @@
 //   curl -L -o /tmp/uh.zip https://www.unicode.org/Public/UCD/latest/ucd/Unihan.zip
 //   unzip -j /tmp/uh.zip Unihan_Readings.txt Unihan_IRGSources.txt -d scripts/.cache
 //   curl -L -o scripts/.cache/kyujitai.json https://unpkg.com/kyujitai@1.3.0/data/kyujitai.json
+//   mkdir -p scripts/.cache/krdict
+//   for n in 5000 10000 15000 20000 25000 30000 35000 40000 45000 50000 51947; do
+//     curl -L -o scripts/.cache/krdict/$n.xml https://github.com/spellcheck-ko/korean-dict-nikl-krdict/raw/master/$n.xml
+//   done
+//   mkdir -p scripts/.cache/jmdict
+//   curl -L -o /tmp/jm.tgz "https://github.com/scriptin/jmdict-simplified/releases/download/3.6.2%2B20261019180022/jmdict-eng-3.6.2%2B20261019180022.json.tgz"
+//   tar -xzf /tmp/jm.tgz -C scripts/.cache/jmdict
 //
 // 実行: node scripts/build-data.mjs
 
@@ -258,17 +267,152 @@ for (const c of charTable) {
 }
 charTable.sort((a, b) => (a.strokes || 99) - (b.strokes || 99) || a.char.localeCompare(b.char));
 
-// --- 5) 漢字語リスト生成（gloss 必須・curated 優先でマージ） ------------------
+// --- 4.5) 한국어기초사전 の日本語の対訳 -------------------------------------
+// 漢字語（原語＝漢字の見出し）ごとに、日本語の対訳を「よみ【表記】」の形で、はじめの意味から順に4つまで
+// （同じ表記は一度）。表記はふだんの意味の行に、よみは漢字を伏せている間（まだ集めていない語）に出す。
+console.log("한국어기초사전 を解析中…");
+const KRDICT = path.join(CACHE, "krdict");
+if (!fs.existsSync(KRDICT)) {
+  console.error(`\n[!] 入力が見つかりません: ${KRDICT}\n    ファイル先頭の prepare 手順でソースを scripts/.cache に配置してください。\n`);
+  process.exit(1);
+}
+const unescapeXml = (v) =>
+  v.replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+
+/** 対訳一つを「よみ【表記】」にそろえる（よみ・表記が複数なら最初のもの、送り仮名の括弧は外す、閉じ忘れの】は補う）。 */
+function jaItem(raw) {
+  let s = raw.trim().replace(/\s*【+/, "【").replace(/】+/g, "】").replace(/（([ぁ-ゖ]+)）/g, "$1");
+  if (s.includes("【") && !s.includes("】")) s += "】";
+  const m = s.match(/^([^【】、]+)【([^【】]+)】$/);
+  if (!m) return s.replace(/、/g, "・");
+  const reading = m[1].split("・")[0];
+  const written = m[2].split("・")[0];
+  return reading === written ? written : `${reading}【${written}】`;
+}
+
+const jaGloss = new Map(); // hangul|hanja -> "よみ【表記】、…"
+{
+  const itemsByKey = new Map();
+  for (const file of fs.readdirSync(KRDICT).filter((f) => f.endsWith(".xml")).sort((a, b) => parseInt(a) - parseInt(b))) {
+    const xml = fs.readFileSync(path.join(KRDICT, file), "utf8");
+    for (const block of xml.split("<LexicalEntry ").slice(1)) {
+      const form = block.match(/<Lemma>\s*<feat att="writtenForm" val="([^"]*)"/)?.[1];
+      const origin = block.match(/<feat att="origin" val="([^"]*)"/)?.[1];
+      if (!form || !origin) continue;
+      const hangul = unescapeXml(form);
+      const hanja = unescapeXml(origin).normalize("NFC");
+      if (!isHangul(hangul) || !isHanja(hanja) || cp(hangul).length !== cp(hanja).length) continue;
+      const key = `${hangul}|${hanja}`;
+      const items = itemsByKey.get(key) ?? [];
+      // はじめの3つの意味まで
+      for (const sense of block.split("<Sense ").slice(1, 4)) {
+        for (const eq of sense.split("<Equivalent>").slice(1)) {
+          if (!eq.includes('att="language" val="일본어"')) continue;
+          const lemma = unescapeXml(eq.match(/att="lemma" val="([^"]*)"/)?.[1] ?? "");
+          for (const raw of lemma.split("。")) {
+            const item = raw.trim() ? jaItem(raw) : "";
+            if (item) items.push(item);
+          }
+        }
+      }
+      itemsByKey.set(key, items);
+    }
+  }
+  const written = (item) => item.match(/【(.+)】$/)?.[1] ?? item;
+  for (const [key, items] of itemsByKey) {
+    const seenWritten = new Set();
+    const kept = [];
+    for (const item of items) {
+      if (seenWritten.has(written(item))) continue;
+      seenWritten.add(written(item));
+      kept.push(item);
+      if (kept.length === 4) break;
+    }
+    if (kept.length) jaGloss.set(key, kept.join("、"));
+  }
+}
+console.log(`  日本語の対訳のある漢字語: ${jaGloss.size} 語`);
+
+// --- 4.6) JMdict（EDRDG、CC BY-SA 4.0）：日本語にも同じ漢字の語があれば、その語を意味に -------------
+// 한국어기초사전 に無い語（まれな語・専門語・四字熟語など）のため。同じ漢字の語がいくつかあれば、
+// kengdic の英語の意味といちばん重なる語を選ぶ。1字の語は、英語の意味が重なるときだけ（取り違えが多い）。
+console.log("JMdict を解析中…");
+const JMDICT = path.join(CACHE, "jmdict");
+const jmFile = fs.existsSync(JMDICT) ? fs.readdirSync(JMDICT).find((f) => /^jmdict-eng-.*\.json$/.test(f)) : undefined;
+if (!jmFile) {
+  console.error(`\n[!] 入力が見つかりません: ${JMDICT}/jmdict-eng-*.json\n    ファイル先頭の prepare 手順でソースを scripts/.cache に配置してください。\n`);
+  process.exit(1);
+}
+const STOP = new Set(
+  "a an the of to and or in on for with by be is are as at from into that this it its one's someone something sth sb oneself person thing things kind sort way etc also very being have has get make do".split(" ")
+);
+const stem = (w) => w.replace(/ies$/, "y").replace(/(ing|ed|es|s|ly)$/, "");
+/** 英語の意味の言葉（小文字・語尾をそろえる。短い語やつなぎの語は除く）。 */
+const enWords = (s) =>
+  new Set(
+    s
+      .toLowerCase()
+      .split(/[^a-z]+/)
+      .filter((w) => w.length >= 3 && !STOP.has(w))
+      .map(stem)
+      .filter((w) => w.length >= 3)
+  );
+const jmByKanji = new Map(); // 表記 -> [{ reading, en }]
+{
+  const jm = JSON.parse(fs.readFileSync(path.join(JMDICT, jmFile), "utf8"));
+  for (const e of jm.words) {
+    for (const k of e.kanji) {
+      const applies = (x) => x.appliesToKanji.includes("*") || x.appliesToKanji.includes(k.text);
+      const reading = e.kana.find(applies)?.text;
+      if (!reading) continue;
+      const en = e.sense
+        .filter(applies)
+        .flatMap((s) => s.gloss.map((g) => g.text))
+        .join(" ");
+      (jmByKanji.get(k.text) ?? jmByKanji.set(k.text, []).get(k.text)).push({ reading, en: enWords(en) });
+    }
+  }
+}
+
+/** 日本語にも同じ漢字の語があれば「よみ【表記】」。無いか、取り違えが疑わしければ undefined。 */
+function jmdictGloss(w) {
+  const jp = toShinjitai(w.hanja);
+  const mine = enWords(w.gloss);
+  let best;
+  for (const written of new Set([jp, jp.replace(/(.)\1/gu, "$1々")])) {
+    for (const c of jmByKanji.get(written) ?? []) {
+      const shared = [...mine].filter((x) => c.en.has(x)).length;
+      if (!best || shared > best.shared) best = { reading: c.reading, written, shared };
+    }
+  }
+  if (!best || (cp(w.hanja).length === 1 && best.shared === 0)) return undefined;
+  return `${best.reading}【${best.written}】`;
+}
+
+// --- 5) 漢字語リスト生成（意味のある語だけ） ---------------------------------
+// 意味は 한국어기초사전 の日本語訳 → 手作業の日本語訳 → JMdict の同じ漢字の語 → kengdic の英語 の順。
+// kengdic に英語の意味が無い語は、한국어기초사전 にあるときだけ入れる。
 const curatedWords = JSON.parse(fs.readFileSync(CURATED_WORDS, "utf8"));
 const wordMap = new Map(); // key -> {hangul,hanja,gloss}
+let fromJmdict = 0;
 for (const w of kengWords) {
-  if (!w.gloss) continue; // 意味のある語だけ
-  wordMap.set(`${w.hangul}|${w.hanja}`, w);
+  const key = `${w.hangul}|${w.hanja}`;
+  let gloss = jaGloss.get(key);
+  if (!gloss && w.gloss) {
+    gloss = jmdictGloss(w);
+    if (gloss) fromJmdict++;
+    else gloss = w.gloss;
+  }
+  if (gloss) wordMap.set(key, { hangul: w.hangul, hanja: w.hanja, gloss });
 }
+console.log(`  JMdict の同じ漢字の語を意味にした語: ${fromJmdict} 語`);
 for (const w of curatedWords) {
-  wordMap.set(`${w.hangul}|${w.hanja}`, w); // 手作業の日本語訳を優先
+  const key = `${w.hangul}|${w.hanja}`;
+  wordMap.set(key, { ...w, gloss: jaGloss.get(key) ?? w.gloss });
 }
 const words = [...wordMap.values()].sort((a, b) => a.hangul.localeCompare(b.hangul));
+const jaCount = words.filter((w) => /[ぁ-ゖァ-ヺ一-鿿]/.test(w.gloss)).length;
+console.log(`  日本語の意味: ${jaCount} / ${words.length} 語`);
 // 各語に日本の新字体表記（字形が異なる場合のみ）を付与。
 for (const w of words) {
   const jp = toShinjitai(w.hanja);

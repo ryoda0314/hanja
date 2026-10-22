@@ -80,6 +80,8 @@
 /* まだ集めていない語の漢字（？ で伏せる）。 */
 .masked { color: var(--faint); letter-spacing: 0.08em; }
 .wordMeta { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
+/* 下の小さな行に、覚え具合の目盛りと日を並べる。 */
+.metaRow { display: flex; align-items: flex-end; gap: 12px; margin-top: 4px; }
 .chev { flex-shrink: 0; color: var(--faint); display: inline-flex; }
 .chev svg { transform: rotate(180deg); }
 /* 見つける：まだ集めていない字（あと1字）。 */

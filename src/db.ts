@@ -4,10 +4,11 @@
 
 import Dexie, { type EntityTable } from "dexie";
 import type { ResolvedWord } from "./data/types";
-import { splitHanja } from "./data/dataset";
+import { hanjaToWords, splitHanja } from "./data/dataset";
+import { metUpdate, readUpdate, type WordProgress } from "./data/stage";
 
-/** ユーザーが集めた漢字語1件。 */
-export interface CollectedWord {
+/** ユーザーが集めた漢字語1件。覚え具合の出来事（WordProgress）も持つ（前の版の語には無い）。 */
+export interface CollectedWord extends WordProgress {
   id: number;
   hangul: string;
   hanja: string;
@@ -96,7 +97,7 @@ export async function hasWord(hangul: string, hanja: string): Promise<boolean> {
 
 /** 語を1件入れ、構成漢字の集計を進める（トランザクション内で呼ぶ）。同じ語があれば false。 */
 async function putWord(
-  word: Pick<CollectedWord, "hangul" | "hanja" | "hanjaJp" | "gloss" | "source">,
+  word: Pick<CollectedWord, "hangul" | "hanja" | "hanjaJp" | "gloss" | "source"> & Omit<WordProgress, "addedAt">,
   at: number
 ): Promise<boolean> {
   const hanja = word.hanja.normalize("NFC");
@@ -110,6 +111,7 @@ async function putWord(
     chars,
     source: word.source,
     addedAt: at,
+    ...progressOf(word),
   } as CollectedWord);
 
   // 構成漢字ごとに収集状態を更新（重複字は1語につき1回だけ数える）。
@@ -137,6 +139,60 @@ export async function addWord(word: ResolvedWord): Promise<boolean> {
   return db.transaction("rw", db.words, db.chars, () => putWord(word, Date.now()));
 }
 
+/** 覚え具合の出来事だけを取り出す（数でないものは捨てる）。 */
+function progressOf(w: Partial<WordProgress>): Omit<WordProgress, "addedAt"> {
+  const out: Omit<WordProgress, "addedAt"> = {};
+  for (const k of ["metDays", "lastMetAt", "readDays", "lastReadAt", "missedAt"] as const) {
+    const v = w[k];
+    if (typeof v === "number" && Number.isFinite(v)) out[k] = v;
+  }
+  return out;
+}
+
+/** 辞書から集めた語のうち、意味がいまの辞書と違う語（辞書を作り直して意味が日本語になったときなど）。手で登録した語はそのまま。 */
+export function staleGlosses(
+  words: Pick<CollectedWord, "id" | "hangul" | "hanja" | "gloss" | "source">[],
+  lookup: (w: { hangul: string; hanja: string }) => string | undefined
+): { id: number; gloss: string }[] {
+  const out: { id: number; gloss: string }[] = [];
+  for (const w of words) {
+    if (w.source !== "seed") continue;
+    const gloss = lookup(w);
+    if (gloss && gloss !== w.gloss) out.push({ id: w.id, gloss });
+  }
+  return out;
+}
+
+/** 集めた語の意味を、読み込んだ辞書の意味にそろえる（起動して辞書を読んだあとに一度）。 */
+export async function refreshGlosses(): Promise<number> {
+  return db.transaction("rw", db.words, async () => {
+    const updates = staleGlosses(await db.words.toArray(), (w) =>
+      hanjaToWords.get(w.hanja)?.find((d) => d.hangul === w.hangul)?.gloss
+    );
+    for (const u of updates) await db.words.update(u.id, { gloss: u.gloss });
+    return updates.length;
+  });
+}
+
+/** 文で出会う で、集めた語にまた出会った（集めた日とは別の日に、一日一度だけ数える）。 */
+export async function recordMet(keys: { hangul: string; hanja: string }[], at = Date.now()): Promise<void> {
+  await db.transaction("rw", db.words, async () => {
+    for (const k of keys) {
+      const w = await db.words.get({ hangul: k.hangul, hanja: k.hanja.normalize("NFC") });
+      const update = w ? metUpdate(w, at) : null;
+      if (w && update) await db.words.update(w.id, update);
+    }
+  });
+}
+
+/** 漢字からハングルを読めた（ok）・答えを見た（!ok）。読めた日は一日一度だけ数える。 */
+export async function recordRead(key: { hangul: string; hanja: string }, ok: boolean, at = Date.now()): Promise<void> {
+  await db.transaction("rw", db.words, async () => {
+    const w = await db.words.get({ hangul: key.hangul, hanja: key.hanja.normalize("NFC") });
+    if (w) await db.words.update(w.id, readUpdate(w, ok, at));
+  });
+}
+
 /**
  * 漢字語を1件削除する。構成漢字の count を減らし、0 になった漢字は図鑑から外す。
  */
@@ -159,8 +215,8 @@ export async function removeWord(id: number): Promise<void> {
 
 // --- 書き出し・読み込み（端末を移す・消える前に残す） -------------------------
 
-/** 書き出しファイルの1語。字の集計は読み込み時に語から作り直すので持たない。 */
-export type BackupWord = Pick<CollectedWord, "hangul" | "hanja" | "gloss" | "source" | "addedAt">;
+/** 書き出しファイルの1語（覚え具合の出来事も）。字の集計は読み込み時に語から作り直すので持たない。 */
+export type BackupWord = Pick<CollectedWord, "hangul" | "hanja" | "gloss" | "source" | "addedAt"> & Omit<WordProgress, "addedAt">;
 
 const BACKUP_APP = "kotonone";
 
@@ -172,7 +228,14 @@ export async function exportBackup(): Promise<string> {
       app: BACKUP_APP,
       version: 1,
       exportedAt: new Date().toISOString(),
-      words: words.map(({ hangul, hanja, gloss, source, addedAt }) => ({ hangul, hanja, gloss, source, addedAt })),
+      words: words.map((w) => ({
+        hangul: w.hangul,
+        hanja: w.hanja,
+        gloss: w.gloss,
+        source: w.source,
+        addedAt: w.addedAt,
+        ...progressOf(w),
+      })),
     },
     null,
     1
@@ -201,6 +264,7 @@ export function parseBackup(text: string): BackupWord[] | null {
       gloss: typeof gloss === "string" ? gloss : "",
       source: source === "seed" || source === "api" || source === "manual" ? source : "manual",
       addedAt: typeof addedAt === "number" && Number.isFinite(addedAt) ? addedAt : Date.now(),
+      ...progressOf(w as Partial<WordProgress>),
     });
   }
   return out;

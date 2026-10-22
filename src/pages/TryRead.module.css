@@ -36,6 +36,8 @@
 
 /* 答え */
 .success { margin: 0; display: inline-flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 600; color: var(--accent); }
+/* 答えを見ずに読めたあとの覚え具合（読めました の文の下、文の頭にそろえる）。 */
+.stageAfter { margin: -8px 0 0; padding-left: 24px; }
 .answer { display: flex; align-items: center; gap: 14px; }
 .names { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; }
 .big { font-size: 34px; font-weight: 500; line-height: 1.35; }
