@@ -4,9 +4,11 @@ import { discoverWords, nearWords, unlockedBy, wordKey } from "../data/combine";
 import { charToWords, getCharData } from "../data/dataset";
 import type { WordData } from "../data/types";
 import { t } from "../copy";
-import { useChars, useWords } from "../util/live";
+import { useChars, useSentences, useWords } from "../util/live";
+import { sentenceScore, wordOf } from "../data/sentences";
 import { usePrefs } from "../prefs";
 import { Icon } from "../components/Icon";
+import { SentenceRows } from "../components/SentenceView";
 import { SpeakButton } from "../components/SpeakButton";
 import { glossLang, WordRow } from "../components/WordRow";
 import { WordSheet } from "../components/WordSheet";
@@ -171,6 +173,7 @@ export default function HanjaDetail() {
                 ))}
               </List>
             ) : null}
+            <CharSentences char={char} collected={collected} owned={ownedKeys} onOpen={setSheet} />
             {stat ? (
               <Paged title={t.char.readable} empty={t.char.readableNone} items={readable} render={(w) => (
                 <WordRow key={wordKey(w)} word={w} onOpen={() => setSheet(w)} />
@@ -232,6 +235,43 @@ function Paged<T>({
       {items.length > limit ? (
         <button type="button" className={app.more} onClick={() => setLimit((n) => n + PAGE)}>
           {t.common.more}（{items.length - limit}）
+        </button>
+      ) : null}
+    </section>
+  );
+}
+
+/** この字が出てくる文（ことのあめ の例文）。印の語を押すとその語が開く。 */
+function CharSentences({
+  char,
+  collected,
+  owned,
+  onOpen,
+}: {
+  char: string;
+  collected: Set<string>;
+  owned: Set<string>;
+  onOpen: (w: Word) => void;
+}) {
+  const data = useSentences();
+  const [limit, setLimit] = useState(4);
+  // 集めた語の入った文から（また出会う）。
+  const ids = useMemo(() => {
+    if (!data) return [];
+    const list = data.byChar.get(char) ?? [];
+    return [...list].sort((a, b) => sentenceScore(data.list[b], collected, owned) - sentenceScore(data.list[a], collected, owned));
+  }, [data, char, collected, owned]);
+  if (!data || ids.length === 0) return null;
+  return (
+    <section className={styles.paged}>
+      <div className={app.listHead}>
+        <h2>{t.char.inSentences}</h2>
+        <span className={app.count}>{ids.length}</span>
+      </div>
+      <SentenceRows data={data} ids={ids.slice(0, limit)} collected={collected} owned={owned} onWord={(m) => onOpen(wordOf(m))} />
+      {ids.length > limit ? (
+        <button type="button" className={app.more} onClick={() => setLimit((n) => n + 8)}>
+          {t.common.more}（{ids.length - limit}）
         </button>
       ) : null}
     </section>

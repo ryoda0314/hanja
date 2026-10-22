@@ -76,7 +76,7 @@ export const t = {
   find: {
     title: "見つける",
     lead: "集めた字だけで読める、まだ集めていない語です。読みたい語は、自分で打ってあつめてください。",
-    views: { read: "読んでみる", readable: "読める語", near: "あと1字", build: "組み立てる" },
+    views: { meet: "文で出会う", read: "読んでみる", readable: "読める語", near: "あと1字" },
     viewsLabel: "見つけ方",
     all: "すべて",
     filterLabel: "字で絞り込む",
@@ -104,6 +104,20 @@ export const t = {
     sortLabel: "並べ方",
     empty: "まだありません。あつめるで、覚えた漢字語を打ってみてください。",
     noMatch: "見つかりませんでした。",
+  },
+  // 文で出会う：姉妹アプリ ことのあめ の例文が降ってきて、その中で漢字語に出会う。
+  meet: {
+    lead: "集めた字の入った文が、雨のように降ってきます。印の付いた語を押すと、その語が開きます。",
+    leadFirst: "韓国語の文が降ってきます。印の付いた漢字語を押して、気になった語をあつめてみてください。",
+    showHanja: "漢字を添える",
+    hideGloss: "訳を隠す",
+    legend: { owned: "集めた語", readable: "集めた字で読める", new: "まだの語" },
+    met: "この雨で出会った語",
+    groups: { owned: "また出会った", readable: "読めそう", new: "はじめて" },
+    next: "次の雨",
+    loading: "文を読み込んでいます",
+    failed: "文を読み込めませんでした。つながったところで、もう一度開いてください。",
+    source: "文は、姉妹アプリ ことのあめ の例文から。",
   },
   // あつめると読める語がいくつ増えるか（ことのね のいちばんの手応え）。
   gain: {
@@ -147,6 +161,7 @@ export const t = {
     rootsNote: "字を押すと、その字の語が見られます。",
     linked: "同じ字が入った、集めた語",
     linkedNone: "同じ字が入った語は、まだ集めていません。",
+    inSentences: "この語が出てくる文",
     typeLabel: "ハングルで打って、あつめる",
     typeHint: "自分の指で打つと、覚えやすくなります。",
     typeWrong: (w: string) => `「${w}」と打ってください。`,
@@ -156,7 +171,7 @@ export const t = {
   },
   hanja: {
     title: "漢字",
-    views: { mine: "集めた字", edu: "基礎漢字1800" },
+    views: { mine: "集めた字", edu: "基礎漢字1800", build: "組み立てる" },
     viewsLabel: "見方",
     search: "漢字・音・読みで探す（學 / 학 / ガク）",
     sorts: { count: "よく出会う順", recent: "新しい順", strokes: "画数順" },
@@ -191,6 +206,7 @@ export const t = {
     near: "あと1字で読める語",
     nearNone: "あと1字で読める語は、いまはありません。",
     others: (n: number) => `この字が入った語は、辞書にほかに${n}語あります。`,
+    inSentences: "この字が出てくる文",
   },
   me: {
     title: "自分",

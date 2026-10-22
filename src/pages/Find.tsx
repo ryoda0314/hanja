@@ -1,34 +1,34 @@
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { discoverWords, findWordsByHanja, nearWords, unlockedBy, unlockers, wordKey } from "../data/combine";
+import { discoverWords, nearWords, unlockedBy, unlockers, wordKey } from "../data/combine";
 import { getCharData } from "../data/dataset";
 import type { WordData } from "../data/types";
 import { t } from "../copy";
-import { useChars, useWords } from "../util/live";
+import { useChars, useSentences, useWords } from "../util/live";
 import { Icon } from "../components/Icon";
 import { WordRow } from "../components/WordRow";
 import { WordSheet } from "../components/WordSheet";
 import app from "../app.module.css";
 import styles from "./Find.module.css";
+import { Meet } from "./Meet";
 import { TryRead } from "./TryRead";
 
-type View = "read" | "readable" | "near" | "build";
-const VIEWS: View[] = ["read", "readable", "near", "build"];
+type View = "meet" | "read" | "readable" | "near";
+const VIEWS: View[] = ["meet", "read", "readable", "near"];
 type Word = Pick<WordData, "hangul" | "hanja" | "gloss">;
 
 const PAGE = 40;
 
 /**
- * 見つける：集めた字だけでできた語を読んでみる、読める語の一覧、あと1字で読める語、字を並べて組み立てる。
- * 読みたい語は開いて、自分で打ってあつめる。
+ * 見つける：文の中で出会う（ことのあめ の例文の雨）、集めた字だけでできた語を読んでみる、読める語の一覧、
+ * あと1字で読める語。読みたい語は開いて、自分で打ってあつめる。
  */
 export default function Find() {
   const [params, setParams] = useSearchParams();
-  const view: View = VIEWS.find((v) => v === params.get("view")) ?? "read";
+  const view: View = VIEWS.find((v) => v === params.get("view")) ?? "meet";
   const words = useWords();
-  const unsorted = useChars();
-  // 組み立てる の札は、よく出会う字から。
-  const chars = useMemo(() => unsorted && [...unsorted].sort((a, b) => b.count - a.count), [unsorted]);
+  const chars = useChars();
+  const sentences = useSentences();
   const [sheet, setSheet] = useState<Word | null>(null);
 
   const ownedKeys = useMemo(() => new Set((words ?? []).map(wordKey)), [words]);
@@ -37,7 +37,7 @@ export default function Find() {
   const near = useMemo(() => nearWords(collected, ownedKeys), [collected, ownedKeys]);
 
   function show(next: View) {
-    setParams(next === "read" ? {} : { view: next }, { replace: true });
+    setParams(next === "meet" ? {} : { view: next }, { replace: true });
   }
 
   return (
@@ -46,15 +46,7 @@ export default function Find() {
         <h1 className={app.subtitleStrong}>{t.find.title}</h1>
       </header>
       <div className={app.bodyTight}>
-        {chars === undefined || words === undefined ? null : chars.length === 0 ? (
-          <div className={app.stack}>
-            <p className={app.lead}>{t.find.empty}</p>
-            <Link to="/" className={app.quietAction}>
-              <Icon name="collect" size={18} />
-              {t.nav.collect}
-            </Link>
-          </div>
-        ) : (
+        {chars === undefined || words === undefined ? null : (
           <>
             <nav className={app.views} aria-label={t.find.viewsLabel}>
               {VIEWS.map((v) => (
@@ -63,12 +55,20 @@ export default function Find() {
                 </button>
               ))}
             </nav>
+            {view === "meet" ? (
+              sentences === undefined ? (
+                <p className={app.note}>{t.meet.loading}</p>
+              ) : sentences === null ? (
+                <p className={app.error}>{t.meet.failed}</p>
+              ) : (
+                <Meet data={sentences} collected={collected} owned={ownedKeys} onOpen={setSheet} />
+              )
+            ) : null}
             {view === "read" ? <TryRead pool={readable} onNear={() => show("near")} /> : null}
             {view === "readable" ? <Readable words={readable} onOpen={setSheet} /> : null}
             {view === "near" ? (
               <Near near={near} gain={(w) => unlockedBy(w, collected, ownedKeys).length} onOpen={setSheet} />
             ) : null}
-            {view === "build" ? <Build chars={(chars ?? []).map((c) => c.char)} ownedKeys={ownedKeys} onOpen={setSheet} /> : null}
           </>
         )}
       </div>
@@ -177,84 +177,6 @@ function Near({
           {t.common.more}（{shown.length - limit}）
         </button>
       ) : null}
-    </section>
-  );
-}
-
-/** 集めた字を押して並べ、その並びの語が辞書にあるかを見る。 */
-function Build({ chars, ownedKeys, onOpen }: { chars: string[]; ownedKeys: Set<string>; onOpen: (w: Word) => void }) {
-  const [sequence, setSequence] = useState<string[]>([]);
-  const [filter, setFilter] = useState("");
-  const q = filter.trim();
-  const tray = q
-    ? chars.filter((c) => {
-        const d = getCharData(c);
-        return c === q || d?.jp === q || d?.readings.some((r) => r.eum === q || r.hun === q) || d?.on?.includes(q);
-      })
-    : chars;
-  const found = findWordsByHanja(sequence);
-
-  return (
-    <section className={app.stack}>
-      <p className={app.lead}>{t.find.buildLead}</p>
-      <div className={styles.board}>
-        <div className={styles.sequence} aria-live="polite">
-          {sequence.length ? (
-            <span className={`hanja ${styles.sequenceText}`}>{sequence.join("")}</span>
-          ) : (
-            <span className={styles.sequenceEmpty}>{t.find.buildEmpty}</span>
-          )}
-        </div>
-        <div className={styles.boardActions}>
-          <button type="button" className={styles.small} disabled={!sequence.length} onClick={() => setSequence((s) => s.slice(0, -1))}>
-            {t.find.undo}
-          </button>
-          <button type="button" className={styles.small} disabled={!sequence.length} onClick={() => setSequence([])}>
-            {t.find.clear}
-          </button>
-        </div>
-      </div>
-
-      {sequence.length > 0 ? (
-        found.length ? (
-          <div className={app.stackSm}>
-            <p className={styles.found}>{t.find.buildFound}</p>
-            <ul className={app.plainList}>
-              {found.map((w) => (
-                <WordRow
-                  key={wordKey(w)}
-                  word={w}
-                  meta={ownedKeys.has(wordKey(w)) ? t.sheet.owned : undefined}
-                  onOpen={() => onOpen(w)}
-                />
-              ))}
-            </ul>
-          </div>
-        ) : (
-          <p className={app.note}>{t.find.buildNone}</p>
-        )
-      ) : null}
-
-      {chars.length > 16 ? (
-        <input
-          type="search"
-          className={app.search}
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          placeholder={t.find.buildFilter}
-          aria-label={t.find.buildFilter}
-        />
-      ) : null}
-      <ul className={styles.tray}>
-        {tray.map((c) => (
-          <li key={c}>
-            <button type="button" className={styles.trayChar} onClick={() => setSequence((s) => [...s, c].slice(0, 8))}>
-              <span className="hanja">{c}</span>
-              <span className={`${styles.trayRead} t-ko`}>{getCharData(c)?.readings[0]?.eum}</span>
-            </button>
-          </li>
-        ))}
-      </ul>
     </section>
   );
 }

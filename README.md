@@ -11,12 +11,12 @@ Web（PWA）→ iOS の順で展開する計画です（React + Capacitor）。
 | タブ | 中身 |
 |---|---|
 | あつめる `/` | 覚えた語を打つ（ハングル、または 學生・学生 のような漢字）。根に分けて見せ、「あつめると読める語が◯語増えます」。あつめると「+◯語」を数え上げで大きく、新しく読めるようになった語、「はじめての字／また出会った字」、前の語とのつながり。増えないうちは「次に出会うと読める語」。辞書に無い語は手で登録（漢字は集めた字の音から組み立てた候補も出す） |
-| 見つける `/find` | 読んでみる（集めた字だけでできた語を漢字だけで見せ、字の音をつなげてハングルで打つ。読めたら集まる。字を押すと音、答えはいつでも）／読める語／あと1字で読める語（あつめると +◯語）／組み立てる |
+| 見つける `/find` | 文で出会う（ことのあめ の例文が4文ずつ降ってくる。文の中の漢字語は、集めた語＝紫の点線・集めた字で読める語・まだの語で印が変わり、上に漢字を添えられる。押すとその語が開く）／読んでみる（漢字だけ見せて、字の音をつなげてハングルで打つ。読めたら集まる）／読める語／あと1字で読める語（あつめると +◯語） |
 | ことば `/words` | 集めた語。探す・字数・新しい順／가나다順 |
-| 漢字 `/hanja` | 集めた字のカード（根の深さ）、基礎漢字1800字の一覧。字のページ `/hanja/:char` は田字格に大きく、韓国語の音・日本語の音訓・日本の字 |
+| 漢字 `/hanja` | 集めた字のカード（根の深さ）、基礎漢字1800字の一覧、集めた字を並べて組み立てる。字のページ `/hanja/:char` は田字格に大きく、韓国語の音・日本語の音訓・日本の字、この字が出てくる文 |
 | 自分 `/me` | これまでの数、表示（字形・アクセント・読み上げの速さ）、書き出し・読み込み、姉妹アプリ、出典 |
 
-語はどこからでもシートで開ける。集めていない語は、そこでハングルを打ってあつめる（ボタン一つでは集めない）。
+語はどこからでもシートで開ける（この語が出てくる文つき）。集めていない語は、そこでハングルを打ってあつめる（ボタン一つでは集めない）。
 
 ## 技術スタック
 
@@ -52,12 +52,16 @@ src/
     resolver.ts        ハングル／漢字（新字体も）→ 漢字語。辞書に無い語の漢字を集めた字から組み立てる
     combine.ts         読める語・あと1字で読める語・あつめると読めるようになる語・次に出会うと効く字・組み立て
     reading.ts         読んでみる の答え合わせ（音節ごと、字のふだんの音とこの語での音の違い）と出す語の選び方
+    sentences.ts       文で出会う の例文（使う画面で一度だけ読む）、印の語の見分け、ひと雨の選び方、音声の場所
   components/          BottomNav / Logo / Icon / Sheet / WordSheet / Roots（根に分けた並び）/ CharCard / …
-  pages/               Collect / Find（TryRead＝読んでみる）/ Words / Hanja / HanjaDetail / Me
-public/data/           生成された辞書（words.json 約16,500語 / hanja-chars.json 約3,400字）
+  pages/               Collect / Find（Meet＝文で出会う、TryRead＝読んでみる）/ Words / Hanja（Build＝組み立てる）/ HanjaDetail / Me
+public/data/           生成された辞書（words.json 約16,600語 / hanja-chars.json 約3,400字）と例文（sentences.json）
 public/icons/          アプリアイコン（scripts/icon から書き出し）
 scripts/
-  build-data.mjs       kengdic + Unihan + kyujitai + curated → public/data/*.json を生成
+  build-data.mjs       kengdic + Unihan + kyujitai + curated → public/data/words.json・hanja-chars.json を生成
+  build-sentences.mjs  ことのあめ の例文に漢字語の印を付けて public/data/sentences.json を生成
+  export-sentences.mjs ことのあめ の査読済みの文を書き出す（公開の鍵で読むだけ）
+  sentences/           decisions.json（印の決定）・review.json（まだ決めていない語）
   icon/                アイコンの元絵（icon.svg）と書き出し（render.mjs、ヘッドレス Chrome）
 ```
 
@@ -84,6 +88,25 @@ npm run build:data
 - 日本語の音読み・訓読みは Unihan kJapanese（よく使う読みから3つまで）。
 
 出典・ライセンスは [NOTICE.md](./NOTICE.md) を参照（kengdic: MPL2.0/LGPL/CC-BY-SA、Unihan: Unicode License）。
+
+## 例文の生成（文で出会う）
+
+例文は姉妹アプリ ことのあめ の例文ライブラリ（韓国語＋日本語訳）から作ります。
+
+```bash
+# 査読済みの文（音声あり）：ことのあめ の公開の値（NEXT_PUBLIC_SUPABASE_URL / ANON_KEY）で読むだけ
+node --env-file=<ことのあめ>/.env.local scripts/export-sentences.mjs
+node scripts/build-sentences.mjs
+
+# または、ことのあめ のリポジトリの作業ファイルから（AI の下書き。捨てた下書きは除く・査読前の文を含む）
+node scripts/build-sentences.mjs --kotonoame <ことのあめ のリポジトリ>
+```
+
+- 語節の頭から辞書の語（2音節以上）を最長一致で探し、日本語訳に同じ字が出てくれば採用する（수업 → 授業）。
+- 訳で裏の取れない語（친구 親舊＝友達 など）は `scripts/sentences/decisions.json` の決定に従う。固有語の取り違え
+  （고양이 の 고양、일어나다 の 일어 …）は `skip`、まれな同音語や辞書の誤りは `exclude` で先に外す。
+- まだ決めていない語は `scripts/sentences/review.json` に出る（多い順、例文つき）。決めて `decisions.json` に足し、作り直す。
+- 今の `public/data/sentences.json` は作業ファイル（下書き）から作ったもの。査読済みの文に替えるときは上の書き出しから。
 
 ## アイコン
 

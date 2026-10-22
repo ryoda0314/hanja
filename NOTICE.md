@@ -30,6 +30,12 @@
 - `src/data/curated-chars.json` / `src/data/curated-words.json` は本プロジェクト独自に作成。
 - 生成時に上記データへ**優先マージ**され、主要漢字の훈음（例: 學「배울 학」）と日本語訳を付与する。
 
+## 5. ことのあめ の例文（文で出会う）
+
+- 出典: 姉妹アプリ ことのあめ（同じ作者）の例文ライブラリ（韓国語の文と日本語訳）。
+- `public/data/sentences.json` は、その文に `scripts/build-sentences.mjs` と `scripts/sentences/decisions.json` で漢字語の印を付けたもの。
+  漢字語の判定には上の辞書データ（kengdic・Unihan・kyujitai）を使う。
+
 ## 将来利用予定（Phase 2・オンライン解決）
 
 | データ | 用途 | 出典 | 備考 |

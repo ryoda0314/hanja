@@ -52,7 +52,7 @@ console.log("kengdic.tsv を解析中…");
 const kengLines = read("kengdic.tsv").split("\n");
 /** @type {{hangul:string,hanja:string,gloss:string}[]} */
 const kengWords = [];
-const seen = new Set();
+const seen = new Map();
 for (let i = 1; i < kengLines.length; i++) {
   const c = kengLines[i].split("\t");
   if (c.length < 4) continue;
@@ -64,10 +64,16 @@ for (let i = 1; i < kengLines.length; i++) {
   if (!isHangul(hangul) || !isHanja(hanja)) continue;
   if (cp(hangul).length !== cp(hanja).length) continue; // 1音節=1漢字（真の한자어）
   const key = `${hangul}|${hanja}`;
-  if (seen.has(key)) continue;
-  seen.add(key);
   gloss = gloss && gloss !== "\\N" ? gloss.trim() : "";
-  kengWords.push({ hangul, hanja, gloss });
+  // 同じ語が意味なしの行と意味ありの行で並ぶことがある（會議 회의 など）：意味のある行を残す。
+  const prev = seen.get(key);
+  if (prev) {
+    if (!prev.gloss && gloss) prev.gloss = gloss;
+    continue;
+  }
+  const entry = { hangul, hanja, gloss };
+  seen.set(key, entry);
+  kengWords.push(entry);
 }
 console.log(`  クリーンな한자어: ${kengWords.length} 語`);
 

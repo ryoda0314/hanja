@@ -2,10 +2,12 @@
 // 前に読んだ結果を最初の描画から使うので、タブを移っても一瞬空にならず、戻ったときにスクロール位置も戻る
 // （中身の高さが先にそろうため）。中身はすぐに端末の最新の結果に入れ替わる。
 import { useLiveQuery } from "dexie-react-hooks";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { loadSentences, type SentenceData } from "../data/sentences";
 import { db, type CollectedChar, type CollectedWord } from "../db";
 
 const last: { words?: CollectedWord[]; chars?: CollectedChar[] } = {};
+let lastSentences: SentenceData | undefined;
 
 /** 集めた語（新しい順）。 */
 export function useWords(): CollectedWord[] | undefined {
@@ -23,4 +25,20 @@ export function useChars(): CollectedChar[] | undefined {
     if (chars) last.chars = chars;
   }, [chars]);
   return chars;
+}
+
+/** 文で出会う の例文（使う画面が開いたときに一度だけ読む）。読んでいる間は undefined、読めなければ null。 */
+export function useSentences(): SentenceData | null | undefined {
+  const [data, setData] = useState<SentenceData | null | undefined>(() => lastSentences);
+  useEffect(() => {
+    let active = true;
+    loadSentences().then((d) => {
+      lastSentences = d ?? undefined;
+      if (active) setData(d);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+  return data;
 }

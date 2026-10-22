@@ -42,5 +42,16 @@
   { "hangul": "공장", "hanja": "工場", "gloss": "工場" },
   { "hangul": "시장", "hanja": "市場", "gloss": "市場・マーケット" },
   { "hangul": "시민", "hanja": "市民", "gloss": "市民" },
-  { "hangul": "장소", "hanja": "場所", "gloss": "場所" }
+  { "hangul": "장소", "hanja": "場所", "gloss": "場所" },
+  { "hangul": "사기", "hanja": "詐欺", "gloss": "詐欺" },
+  { "hangul": "학식", "hanja": "學食", "gloss": "学食（学生食堂）" },
+  { "hangul": "고속도로", "hanja": "高速道路", "gloss": "高速道路" },
+  { "hangul": "연하장", "hanja": "年賀狀", "gloss": "年賀状" },
+  { "hangul": "영수증", "hanja": "領收證", "gloss": "レシート・領収書" },
+  { "hangul": "일식", "hanja": "日食", "gloss": "和食（日本料理）" },
+  { "hangul": "강수", "hanja": "降水", "gloss": "降水" },
+  { "hangul": "휴지", "hanja": "休紙", "gloss": "ティッシュ・ちり紙" },
+  { "hangul": "대기", "hanja": "待機", "gloss": "待機・待つこと" },
+  { "hangul": "주장", "hanja": "主將", "gloss": "キャプテン・主将" },
+  { "hangul": "가성비", "hanja": "價性比", "gloss": "コスパ（価格に対する性能）" }
 ]

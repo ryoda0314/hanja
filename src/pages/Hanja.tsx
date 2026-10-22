@@ -1,19 +1,23 @@
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { wordKey } from "../data/combine";
 import { charMap, eduChars } from "../data/dataset";
-import type { HanjaCharData } from "../data/types";
+import type { HanjaCharData, WordData } from "../data/types";
 import { t } from "../copy";
 import type { CollectedChar } from "../db";
-import { useChars } from "../util/live";
+import { useChars, useWords } from "../util/live";
 import { CharCard, CharCell } from "../components/CharCard";
 import { Icon } from "../components/Icon";
 import { Sprout } from "../components/Sprout";
+import { WordSheet } from "../components/WordSheet";
 import { compareKo, leadConsonant, leadOrder } from "../util/korean";
 import app from "../app.module.css";
 import hs from "../components/hanja.module.css";
+import { Build } from "./Build";
 import styles from "./Hanja.module.css";
 
-type View = "mine" | "edu";
+type View = "mine" | "edu" | "build";
+const VIEWS: View[] = ["mine", "edu", "build"];
 type Sort = "count" | "recent" | "strokes";
 
 const WEEK = 7 * 86_400_000;
@@ -43,13 +47,16 @@ function searchChars(q: string): HanjaCharData[] {
     .slice(0, SEARCH_LIMIT);
 }
 
-/** 漢字：集めた字のカード（根の深さつき）と、基礎漢字1800字の一覧。字・音・読みで探せる。 */
+/** 漢字：集めた字のカード（根の深さつき）、基礎漢字1800字の一覧、集めた字を並べて組み立てる。字・音・読みで探せる。 */
 export default function Hanja() {
   const [params, setParams] = useSearchParams();
-  const view: View = params.get("view") === "edu" ? "edu" : "mine";
+  const view: View = VIEWS.find((v) => v === params.get("view")) ?? "mine";
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>("count");
   const chars = useChars();
+  const words = useWords();
+  const ownedKeys = useMemo(() => new Set((words ?? []).map(wordKey)), [words]);
+  const [sheet, setSheet] = useState<Pick<WordData, "hangul" | "hanja" | "gloss"> | null>(null);
   const countByChar = useMemo(() => new Map((chars ?? []).map((c) => [c.char, c.count])), [chars]);
   const q = query.trim();
   const results = useMemo(() => (q ? searchChars(q) : []), [q]);
@@ -72,7 +79,7 @@ export default function Hanja() {
           />
           {q ? null : (
             <nav className={app.views} aria-label={t.hanja.viewsLabel}>
-              {(["mine", "edu"] as const).map((v) => (
+              {VIEWS.map((v) => (
                 <button
                   key={v}
                   type="button"
@@ -99,7 +106,13 @@ export default function Hanja() {
               ))}
             </ul>
           )
-        ) : chars === undefined ? null : view === "edu" ? (
+        ) : chars === undefined ? null : view === "build" ? (
+          <Build
+            chars={[...chars].sort((a, b) => b.count - a.count).map((c) => c.char)}
+            ownedKeys={ownedKeys}
+            onOpen={setSheet}
+          />
+        ) : view === "edu" ? (
           <Edu countByChar={countByChar} />
         ) : chars.length === 0 ? (
           <div className={styles.empty}>
@@ -114,6 +127,7 @@ export default function Hanja() {
           <Mine chars={chars} sort={sort} onSort={setSort} />
         )}
       </div>
+      {sheet ? <WordSheet key={wordKey(sheet)} word={sheet} onClose={() => setSheet(null)} /> : null}
     </>
   );
 }

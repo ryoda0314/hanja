@@ -3,14 +3,16 @@ import { useMemo, useState, type FormEvent } from "react";
 import { unlockedBy, wordKey } from "../data/combine";
 import { splitHanja } from "../data/dataset";
 import { enrich } from "../data/resolver";
+import { wordOf } from "../data/sentences";
 import type { WordData } from "../data/types";
 import { t } from "../copy";
 import { addWord, db, removeWord, type CollectedWord } from "../db";
-import { useChars, useWords } from "../util/live";
+import { useChars, useSentences, useWords } from "../util/live";
 import appStyles from "../app.module.css";
 import { Gain } from "./Gain";
 import HanjaText from "./HanjaText";
 import { Roots, rootNotes } from "./Roots";
+import { SentenceRows } from "./SentenceView";
 import { Sheet } from "./Sheet";
 import { SpeakButton } from "./SpeakButton";
 import { glossLang, WordRow } from "./WordRow";
@@ -72,6 +74,26 @@ function Body({
     [owned, chars, words, word.hangul, hanja, collected, ownedKeys]
   );
   const fresh = new Set(splitHanja(hanja).filter((c) => !collected.has(c))).size;
+  const sentences = useSentences();
+  const sentenceIds = useMemo(
+    () => (sentences?.byWord.get(`${word.hangul}|${hanja}`) ?? []).slice(0, 3),
+    [sentences, word.hangul, hanja]
+  );
+  // この語が出てくる文（ことのあめ の例文）。印の別の語を押すと、その語に替わる。
+  const examples =
+    sentences && sentenceIds.length > 0 ? (
+      <section className={styles.section}>
+        <h3 className="label">{t.sheet.inSentences}</h3>
+        <SentenceRows
+          data={sentences}
+          ids={sentenceIds}
+          collected={collected}
+          owned={ownedKeys}
+          target={{ hangul: word.hangul, hanja }}
+          onWord={(m) => onOpen(wordOf(m))}
+        />
+      </section>
+    ) : null;
 
   const linked = useLiveQuery(async () => {
     const lists = await Promise.all(
@@ -148,6 +170,7 @@ function Body({
               </ul>
             )}
           </section>
+          {examples}
           <div className={styles.dangerRow}>
             {confirming ? (
               <div className={styles.confirm}>
@@ -200,6 +223,7 @@ function Body({
               {wrong ? t.sheet.typeWrong(word.hangul) : t.sheet.typeHint}
             </p>
           </form>
+          {examples}
         </>
       )}
     </>
