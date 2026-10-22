@@ -6,6 +6,7 @@ import {
   findWordsByHanja,
   isRealWord,
   nearWords,
+  unlockedBy,
   unlockers,
   wordKey,
 } from "./combine";
@@ -129,5 +130,27 @@ describe("checkWordExists / findWordsByHanja / isRealWord", () => {
   it("isRealWord はハングルで実在判定する", () => {
     expect(isRealWord("학생")).toBe(true);
     expect(isRealWord("없는단어")).toBe(false);
+  });
+});
+
+describe("unlockedBy", () => {
+  it("はじめての字を含む語をあつめると、その字で読めるようになる語を返す", () => {
+    // 學・生 を持っていて 大學 をあつめる → 大 が入り 大學生 が読めるようになる（大門 は 門 が無い）
+    const got = unlockedBy({ hangul: "대학", hanja: "大學" }, new Set(["學", "生"]), new Set());
+    expect(got.map((w) => w.hanja)).toEqual(["大學生"]);
+  });
+
+  it("読みやすい順（字数の少ない語から）に並び、あつめる語そのものは含めない", () => {
+    const got = unlockedBy({ hangul: "대학", hanja: "大學" }, new Set(["學", "生", "門"]), new Set());
+    expect(got.map((w) => w.hanja)).toEqual(["大門", "大學生"]);
+  });
+
+  it("知っている字だけの語では何も増えない", () => {
+    expect(unlockedBy({ hangul: "학생", hanja: "學生" }, new Set(["學", "生", "大"]), new Set())).toEqual([]);
+  });
+
+  it("持っている語は数えない", () => {
+    const owned = new Set([wordKey({ hangul: "대학생", hanja: "大學生" })]);
+    expect(unlockedBy({ hangul: "대학", hanja: "大學" }, new Set(["學", "生"]), owned)).toEqual([]);
   });
 });

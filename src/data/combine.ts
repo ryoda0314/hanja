@@ -47,6 +47,7 @@ export function byEase(a: WordData, b: WordData): number {
 
 /**
  * 収集済み漢字の集合から、それらの漢字「だけ」で構成できる実在の漢字語を列挙する（読みやすい順）。
+ * 1字だけの語（家 가）は字そのものなので含めない（読める語は、字の組み合わせで読める語）。
  *
  * @param collectedChars 収集済みの漢字（1文字）の集合
  * @param owned          すでに単語帳に持っている語のキー（wordKey）の集合
@@ -60,8 +61,8 @@ export function discoverWords(
   const results: DiscoverResult[] = [];
   for (const w of candidatesFor(collectedChars)) {
     const chars = splitHanja(w.hanja);
-    // 構成漢字がすべて収集済みであること。
-    const formable = chars.length > 0 && chars.every((c) => collectedChars.has(c));
+    // 2字以上で、構成漢字がすべて収集済みであること。
+    const formable = chars.length > 1 && chars.every((c) => collectedChars.has(c));
     if (!formable) continue;
 
     const alreadyOwned = owned.has(wordKey(w));
@@ -83,12 +84,38 @@ export interface NearResult {
 export function nearWords(collectedChars: Set<string>, owned: Set<string>): NearResult[] {
   const out: NearResult[] = [];
   for (const w of candidatesFor(collectedChars)) {
-    if (owned.has(wordKey(w))) continue;
+    if (owned.has(wordKey(w)) || splitHanja(w.hanja).length < 2) continue;
     const missing = [...new Set(splitHanja(w.hanja))].filter((c) => !collectedChars.has(c));
     if (missing.length === 1) out.push({ word: w, missing: missing[0] });
   }
   out.sort((a, b) => byEase(a.word, b.word));
   return out;
+}
+
+/**
+ * この語をあつめると新しく読めるようになる語（読みやすい順）。語の中のはじめての字が鍵になるので、
+ * 知っている字だけの語なら空。あつめる語そのものと、持っている語は含めない。
+ */
+export function unlockedBy(
+  word: { hangul: string; hanja: string },
+  collectedChars: Set<string>,
+  owned: Set<string>
+): WordData[] {
+  const chars = new Set(splitHanja(word.hanja));
+  const fresh = [...chars].filter((c) => !collectedChars.has(c));
+  if (fresh.length === 0) return [];
+  const after = new Set([...collectedChars, ...chars]);
+  const self = wordKey(word);
+  const out = new Map<string, WordData>();
+  for (const c of fresh) {
+    for (const w of charToWords.get(c) ?? []) {
+      const key = wordKey(w);
+      if (key === self || owned.has(key) || out.has(key)) continue;
+      const parts = splitHanja(w.hanja);
+      if (parts.length > 1 && parts.every((x) => after.has(x))) out.set(key, w);
+    }
+  }
+  return [...out.values()].sort(byEase);
 }
 
 /** 次に出会うと読める語が増える字を、増える語数の多い順に（同数なら基礎漢字を先に）。 */

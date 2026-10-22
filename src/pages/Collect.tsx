@@ -1,16 +1,18 @@
 import { useMemo, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { discoverWords, wordKey } from "../data/combine";
+import { discoverWords, unlockedBy, wordKey } from "../data/combine";
 import { splitHanja } from "../data/dataset";
 import { guessHanja, isHanjaInput, resolveByHanja, resolveLocalAll, resolveManual } from "../data/resolver";
 import type { ResolvedWord, WordData } from "../data/types";
 import { t } from "../copy";
 import { addWord, db, type CollectedWord } from "../db";
 import { useChars, useWords } from "../util/live";
+import { Gain } from "../components/Gain";
 import HanjaText from "../components/HanjaText";
 import { Icon } from "../components/Icon";
 import { PairLink } from "../components/Layout";
 import { Logo } from "../components/Logo";
+import { NearNext } from "../components/NearNext";
 import { Roots, rootNotes } from "../components/Roots";
 import { SpeakButton } from "../components/SpeakButton";
 import { Sprout } from "../components/Sprout";
@@ -24,7 +26,8 @@ type Status =
   | { kind: "candidates"; byHanja: boolean; words: ResolvedWord[] }
   | { kind: "resolved"; word: ResolvedWord }
   | { kind: "notfound"; query: string }
-  | { kind: "collected"; word: ResolvedWord; before: number[] };
+  // unlocked：この語をあつめて新しく読めるようになった語（あつめる前の手持ちで数えておく）。
+  | { kind: "collected"; word: ResolvedWord; before: number[]; unlocked: WordData[] };
 
 const OPENED_LIMIT = 6;
 
@@ -62,12 +65,13 @@ export default function Collect() {
 
   async function collect(word: ResolvedWord) {
     const before = await Promise.all(word.chars.map((c) => db.chars.get(c).then((x) => x?.count ?? 0)));
+    const unlocked = unlockedBy(word, collected, ownedKeys);
     if (!(await addWord(word))) {
       // もう持っている語（手で打った語が辞書の語と同じだったときなど）：そう言う画面へ。
       setStatus({ kind: "resolved", word });
       return;
     }
-    setStatus({ kind: "collected", word, before });
+    setStatus({ kind: "collected", word, before, unlocked });
     setInput("");
   }
 
@@ -141,7 +145,14 @@ export default function Collect() {
           ) : null}
 
           {status.kind === "resolved" ? (
-            <Found word={status.word} owned={findOwned(status.word)} onCollect={() => collect(status.word)} onNext={next} />
+            <Found
+              word={status.word}
+              owned={findOwned(status.word)}
+              gain={unlockedBy(status.word, collected, ownedKeys).length}
+              fresh={new Set(status.word.chars.filter((c) => !collected.has(c))).size}
+              onCollect={() => collect(status.word)}
+              onNext={next}
+            />
           ) : null}
 
           {status.kind === "notfound" ? <Manual query={status.query} roots={roots} onCollect={collect} /> : null}
@@ -151,9 +162,9 @@ export default function Collect() {
               word={status.word}
               before={status.before}
               words={words ?? []}
-              opened={readable.filter((w) =>
-                w.chars.some((c) => status.word.chars.includes(c) && status.before[status.word.chars.indexOf(c)] === 0)
-              )}
+              opened={status.unlocked}
+              collected={collected}
+              owned={ownedKeys}
               onOpen={setSheet}
               onNext={next}
             />
@@ -167,7 +178,10 @@ export default function Collect() {
                     <span className={styles.readableTitle}>{t.collect.readable(readable.length)}</span>
                     <span className={app.note}>{t.collect.readableNote}</span>
                   </span>
-                  <Icon name="arrow" size={20} />
+                  <span className={styles.readableAction}>
+                    {t.collect.readableAction}
+                    <Icon name="arrow" size={18} />
+                  </span>
                 </Link>
               ) : null}
               <section>
@@ -230,11 +244,17 @@ function Names({ word }: { word: Pick<WordData, "hangul" | "hanja" | "gloss"> })
 function Found({
   word,
   owned,
+  gain,
+  fresh,
   onCollect,
   onNext,
 }: {
   word: ResolvedWord;
   owned: CollectedWord | null;
+  /** あつめると新しく読めるようになる語の数。 */
+  gain: number;
+  /** まだ集めていない字の数。 */
+  fresh: number;
   onCollect: () => void;
   onNext: () => void;
 }) {
@@ -250,20 +270,32 @@ function Found({
           </button>
         </>
       ) : (
-        <button type="button" className="btn" onClick={onCollect}>
-          {t.collect.collect}
-        </button>
+        <>
+          {gain > 0 ? (
+            <Gain count={gain} when="before" />
+          ) : (
+            <p className={app.note}>{fresh === 0 ? t.gain.known : t.gain.firstRoots(fresh)}</p>
+          )}
+          <button type="button" className="btn" onClick={onCollect}>
+            {t.collect.collect}
+          </button>
+        </>
       )}
     </section>
   );
 }
 
-/** あつめた直後：字ごとに、はじめてか、また出会ったか。前の語とのつながり。新しく読めるようになった語。 */
+/**
+ * あつめた直後：字ごとに、はじめてか、また出会ったか。新しく読めるようになった語の数（いちばん大きく）と、その語。
+ * 前の語とのつながり。読める語が増えなかったときは、次に出会うと読める語。
+ */
 function Collected({
   word,
   before,
   words,
   opened,
+  collected,
+  owned,
   onOpen,
   onNext,
 }: {
@@ -271,6 +303,8 @@ function Collected({
   before: number[];
   words: CollectedWord[];
   opened: WordData[];
+  collected: Set<string>;
+  owned: Set<string>;
   onOpen: (w: Pick<WordData, "hangul" | "hanja" | "gloss">) => void;
   onNext: () => void;
 }) {
@@ -287,6 +321,24 @@ function Collected({
       </p>
       <Names word={word} />
       <Roots hangul={word.hangul} hanja={word.hanja} notes={rootNotes(before)} grow />
+      {opened.length > 0 ? (
+        <section className={styles.opened}>
+          <Gain count={opened.length} when="after" />
+          <ul className={`${app.plainList} ${styles.openedList}`}>
+            {opened.slice(0, OPENED_LIMIT).map((w) => (
+              <WordRow key={wordKey(w)} word={w} onOpen={() => onOpen(w)} />
+            ))}
+          </ul>
+          {opened.length > OPENED_LIMIT ? (
+            <Link to="/find?view=readable" className={app.quietAction}>
+              {t.collect.openedMore(opened.length - OPENED_LIMIT)}
+              <Icon name="arrow" size={16} />
+            </Link>
+          ) : null}
+        </section>
+      ) : (
+        <NearNext hanja={word.hanja} collected={collected} owned={owned} onOpen={onOpen} />
+      )}
       {links.length > 0 ? (
         <ul className={styles.links}>
           {links.map((l) => (
@@ -306,22 +358,6 @@ function Collected({
             </li>
           ))}
         </ul>
-      ) : null}
-      {opened.length > 0 ? (
-        <section className={styles.opened}>
-          <h3 className="label">{t.collect.opened}</h3>
-          <ul className={app.plainList}>
-            {opened.slice(0, OPENED_LIMIT).map((w) => (
-              <WordRow key={wordKey(w)} word={w} onOpen={() => onOpen(w)} />
-            ))}
-          </ul>
-          {opened.length > OPENED_LIMIT ? (
-            <Link to="/find" className={app.quietAction}>
-              {t.collect.openedMore(opened.length - OPENED_LIMIT)}
-              <Icon name="arrow" size={16} />
-            </Link>
-          ) : null}
-        </section>
       ) : null}
       <button type="button" className="btn-quiet" onClick={onNext}>
         {t.collect.next}

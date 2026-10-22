@@ -1,12 +1,14 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { useState, type FormEvent } from "react";
-import { wordKey } from "../data/combine";
+import { useMemo, useState, type FormEvent } from "react";
+import { unlockedBy, wordKey } from "../data/combine";
 import { splitHanja } from "../data/dataset";
 import { enrich } from "../data/resolver";
 import type { WordData } from "../data/types";
 import { t } from "../copy";
 import { addWord, db, removeWord, type CollectedWord } from "../db";
+import { useChars, useWords } from "../util/live";
 import appStyles from "../app.module.css";
+import { Gain } from "./Gain";
 import HanjaText from "./HanjaText";
 import { Roots, rootNotes } from "./Roots";
 import { Sheet } from "./Sheet";
@@ -57,7 +59,19 @@ function Body({
   const [typed, setTyped] = useState("");
   const [wrong, setWrong] = useState(false);
   const [before, setBefore] = useState<number[] | null>(null);
+  // あつめて新しく読めるようになった語（あつめる前の手持ちで数えておく）。
+  const [unlocked, setUnlocked] = useState<WordData[] | null>(null);
   const [confirming, setConfirming] = useState(false);
+
+  const words = useWords();
+  const chars = useChars();
+  const collected = useMemo(() => new Set((chars ?? []).map((c) => c.char)), [chars]);
+  const ownedKeys = useMemo(() => new Set((words ?? []).map(wordKey)), [words]);
+  const gain = useMemo(
+    () => (owned || !chars || !words ? [] : unlockedBy({ hangul: word.hangul, hanja }, collected, ownedKeys)),
+    [owned, chars, words, word.hangul, hanja, collected, ownedKeys]
+  );
+  const fresh = new Set(splitHanja(hanja).filter((c) => !collected.has(c))).size;
 
   const linked = useLiveQuery(async () => {
     const lists = await Promise.all(
@@ -75,8 +89,10 @@ function Body({
       return;
     }
     const counts = await Promise.all(splitHanja(hanja).map((c) => db.chars.get(c).then((x) => x?.count ?? 0)));
+    const opened = gain;
     await addWord(enrich({ ...word, hanja }, "seed"));
     setBefore(counts);
+    setUnlocked(opened);
   }
 
   async function remove() {
@@ -110,6 +126,16 @@ function Body({
       {owned ? (
         <>
           <p className={styles.since}>{before ? t.collect.collectedTitle(word.hangul) : t.sheet.since(owned.addedAt)}</p>
+          {unlocked && unlocked.length > 0 ? (
+            <section className={styles.section}>
+              <Gain count={unlocked.length} when="after" />
+              <ul className={appStyles.plainList}>
+                {unlocked.slice(0, 4).map((w) => (
+                  <WordRow key={wordKey(w)} word={w} onOpen={() => onOpen(w)} />
+                ))}
+              </ul>
+            </section>
+          ) : null}
           <section className={styles.section}>
             <h3 className="label">{t.sheet.linked}</h3>
             {linked === undefined ? null : linked.length === 0 ? (
@@ -141,33 +167,40 @@ function Body({
           </div>
         </>
       ) : (
-        <form className={styles.typeBox} onSubmit={collect}>
-          <label htmlFor="type-word" className="label">
-            {t.sheet.typeLabel}
-          </label>
-          <div className={styles.typeRow}>
-            <input
-              id="type-word"
-              className={`${styles.typeInput} t-ko`}
-              lang="ko"
-              value={typed}
-              onChange={(e) => {
-                setTyped(e.target.value);
-                setWrong(false);
-              }}
-              autoComplete="off"
-              autoCapitalize="off"
-              spellCheck={false}
-              enterKeyHint="done"
-            />
-            <button type="submit" className="btn" disabled={!typed.trim()}>
-              {t.collect.collect}
-            </button>
-          </div>
-          <p className={wrong ? appStyles.error : appStyles.note} role={wrong ? "alert" : undefined}>
-            {wrong ? t.sheet.typeWrong(word.hangul) : t.sheet.typeHint}
-          </p>
-        </form>
+        <>
+          {gain.length > 0 ? (
+            <Gain count={gain.length} when="before" />
+          ) : chars ? (
+            <p className={appStyles.note}>{fresh === 0 ? t.gain.known : t.gain.firstRoots(fresh)}</p>
+          ) : null}
+          <form className={styles.typeBox} onSubmit={collect}>
+            <label htmlFor="type-word" className="label">
+              {t.sheet.typeLabel}
+            </label>
+            <div className={styles.typeRow}>
+              <input
+                id="type-word"
+                className={`${styles.typeInput} t-ko`}
+                lang="ko"
+                value={typed}
+                onChange={(e) => {
+                  setTyped(e.target.value);
+                  setWrong(false);
+                }}
+                autoComplete="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                enterKeyHint="done"
+              />
+              <button type="submit" className="btn" disabled={!typed.trim()}>
+                {t.collect.collect}
+              </button>
+            </div>
+            <p className={wrong ? appStyles.error : appStyles.note} role={wrong ? "alert" : undefined}>
+              {wrong ? t.sheet.typeWrong(word.hangul) : t.sheet.typeHint}
+            </p>
+          </form>
+        </>
       )}
     </>
   );

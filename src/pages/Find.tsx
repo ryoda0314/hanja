@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { discoverWords, findWordsByHanja, nearWords, unlockers, wordKey } from "../data/combine";
+import { discoverWords, findWordsByHanja, nearWords, unlockedBy, unlockers, wordKey } from "../data/combine";
 import { getCharData } from "../data/dataset";
 import type { WordData } from "../data/types";
 import { t } from "../copy";
@@ -10,19 +10,21 @@ import { WordRow } from "../components/WordRow";
 import { WordSheet } from "../components/WordSheet";
 import app from "../app.module.css";
 import styles from "./Find.module.css";
+import { TryRead } from "./TryRead";
 
-type View = "readable" | "near" | "build";
+type View = "read" | "readable" | "near" | "build";
+const VIEWS: View[] = ["read", "readable", "near", "build"];
 type Word = Pick<WordData, "hangul" | "hanja" | "gloss">;
 
 const PAGE = 40;
 
 /**
- * 見つける：集めた字だけで読める語、あと1字で読める語、字を並べて組み立てる。
+ * 見つける：集めた字だけでできた語を読んでみる、読める語の一覧、あと1字で読める語、字を並べて組み立てる。
  * 読みたい語は開いて、自分で打ってあつめる。
  */
 export default function Find() {
   const [params, setParams] = useSearchParams();
-  const view: View = params.get("view") === "near" ? "near" : params.get("view") === "build" ? "build" : "readable";
+  const view: View = VIEWS.find((v) => v === params.get("view")) ?? "read";
   const words = useWords();
   const unsorted = useChars();
   // 組み立てる の札は、よく出会う字から。
@@ -35,7 +37,7 @@ export default function Find() {
   const near = useMemo(() => nearWords(collected, ownedKeys), [collected, ownedKeys]);
 
   function show(next: View) {
-    setParams(next === "readable" ? {} : { view: next }, { replace: true });
+    setParams(next === "read" ? {} : { view: next }, { replace: true });
   }
 
   return (
@@ -44,7 +46,7 @@ export default function Find() {
         <h1 className={app.subtitleStrong}>{t.find.title}</h1>
       </header>
       <div className={app.bodyTight}>
-        {chars === undefined ? null : chars.length === 0 ? (
+        {chars === undefined || words === undefined ? null : chars.length === 0 ? (
           <div className={app.stack}>
             <p className={app.lead}>{t.find.empty}</p>
             <Link to="/" className={app.quietAction}>
@@ -55,17 +57,17 @@ export default function Find() {
         ) : (
           <>
             <nav className={app.views} aria-label={t.find.viewsLabel}>
-              {(["readable", "near", "build"] as const).map((v) => (
+              {VIEWS.map((v) => (
                 <button key={v} type="button" className={app.view} aria-pressed={view === v} onClick={() => show(v)}>
                   {t.find.views[v]}
-                  {v !== "build" ? (
-                    <span className={app.filterCount}>{v === "readable" ? readable.length : near.length}</span>
-                  ) : null}
                 </button>
               ))}
             </nav>
+            {view === "read" ? <TryRead pool={readable} onNear={() => show("near")} /> : null}
             {view === "readable" ? <Readable words={readable} onOpen={setSheet} /> : null}
-            {view === "near" ? <Near near={near} onOpen={setSheet} /> : null}
+            {view === "near" ? (
+              <Near near={near} gain={(w) => unlockedBy(w, collected, ownedKeys).length} onOpen={setSheet} />
+            ) : null}
             {view === "build" ? <Build chars={(chars ?? []).map((c) => c.char)} ownedKeys={ownedKeys} onOpen={setSheet} /> : null}
           </>
         )}
@@ -111,7 +113,16 @@ function Readable({ words, onOpen }: { words: (WordData & { chars: string[] })[]
 }
 
 /** あと1字で読める語。次に出会うと読める語が増える字から絞り込める。 */
-function Near({ near, onOpen }: { near: ReturnType<typeof nearWords>; onOpen: (w: Word) => void }) {
+function Near({
+  near,
+  gain,
+  onOpen,
+}: {
+  near: ReturnType<typeof nearWords>;
+  /** その語をあつめると新しく読めるようになる語の数。 */
+  gain: (w: Word) => number;
+  onOpen: (w: Word) => void;
+}) {
   const [focus, setFocus] = useState<string | null>(null);
   const [limit, setLimit] = useState(PAGE);
   const keys = useMemo(() => unlockers(near).slice(0, 24), [near]);
@@ -143,15 +154,23 @@ function Near({ near, onOpen }: { near: ReturnType<typeof nearWords>; onOpen: (w
         </Link>
       ) : null}
       <ul className={app.plainList}>
-        {shown.slice(0, limit).map((n) => (
-          <WordRow
-            key={wordKey(n.word)}
-            word={n.word}
-            missing={n.missing}
-            meta={t.find.missingNote(n.missing)}
-            onOpen={() => onOpen(n.word)}
-          />
-        ))}
+        {shown.slice(0, limit).map((n) => {
+          const more = gain(n.word);
+          return (
+            <WordRow
+              key={wordKey(n.word)}
+              word={n.word}
+              missing={n.missing}
+              meta={
+                <>
+                  {t.find.missingNote(n.missing)}
+                  {more > 0 ? <span className={styles.gain}>・{t.gain.row(more)}</span> : null}
+                </>
+              }
+              onOpen={() => onOpen(n.word)}
+            />
+          );
+        })}
       </ul>
       {shown.length > limit ? (
         <button type="button" className={app.more} onClick={() => setLimit((n) => n + PAGE)}>

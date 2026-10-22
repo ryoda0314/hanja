@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { discoverWords, nearWords, wordKey } from "../data/combine";
+import { discoverWords, nearWords, unlockedBy, wordKey } from "../data/combine";
 import { charToWords, getCharData } from "../data/dataset";
 import type { WordData } from "../data/types";
 import { t } from "../copy";
@@ -54,6 +54,12 @@ export default function HanjaDetail() {
     () => nearWords(collected, ownedKeys).filter((n) => Array.from(n.word.hanja).includes(char)),
     [collected, ownedKeys, char]
   );
+
+  // あと1字の語：足りない字と、あつめると増える読める語の数。
+  function nearMeta(w: WordData, missing: string) {
+    const more = unlockedBy(w, collected, ownedKeys).length;
+    return more > 0 ? `${t.find.missingNote(missing)}・${t.gain.row(more)}` : t.find.missingNote(missing);
+  }
 
   function back() {
     // ほかの画面から来たなら戻る。直接開いたなら漢字の一覧へ。
@@ -175,7 +181,7 @@ export default function HanjaDetail() {
                 key={wordKey(n.word)}
                 word={n.word}
                 missing={n.missing}
-                meta={t.find.missingNote(n.missing)}
+                meta={nearMeta(n.word, n.missing)}
                 onOpen={() => setSheet(n.word)}
               />
             )} />

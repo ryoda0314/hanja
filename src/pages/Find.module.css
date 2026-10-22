@@ -1,4 +1,5 @@
 .unlockLabel { margin-top: 8px; }
+.gain { color: var(--accent); font-weight: 600; }
 
 /* 組み立てる：並べた字の板と、集めた字の札。 */
 .board { display: flex; flex-direction: column; gap: 10px; padding: 16px; background: var(--surface); border-radius: var(--radius); }

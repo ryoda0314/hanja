@@ -33,7 +33,14 @@
 }
 .linkWord:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .linkTail { margin-left: 4px; }
-.opened { display: flex; flex-direction: column; gap: 4px; padding-top: 4px; }
+.opened { display: flex; flex-direction: column; gap: 8px; }
+/* 新しく読めるようになった語は、一つずつ下から現れる。 */
+.openedList > li { animation: block-in 0.4s ease-out both; }
+.openedList > li:nth-child(2) { animation-delay: 0.08s; }
+.openedList > li:nth-child(3) { animation-delay: 0.16s; }
+.openedList > li:nth-child(4) { animation-delay: 0.24s; }
+.openedList > li:nth-child(5) { animation-delay: 0.32s; }
+.openedList > li:nth-child(6) { animation-delay: 0.4s; }
 
 /* 辞書に無い語 */
 .manual { padding: 16px; border: 1px solid var(--line-2); border-radius: var(--radius); }
@@ -53,7 +60,7 @@
   color: var(--ink); text-decoration: none;
 }
 .readable:hover { background: var(--surface); }
-.readable > svg { flex-shrink: 0; color: var(--accent); }
+.readableAction { flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; font-size: 14px; font-weight: 600; color: var(--accent); }
 .readableText { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .readableTitle { font-size: 16px; font-weight: 600; }
 
