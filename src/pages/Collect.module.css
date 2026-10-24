@@ -42,6 +42,18 @@
 .openedList > li:nth-child(5) { animation-delay: 0.32s; }
 .openedList > li:nth-child(6) { animation-delay: 0.4s; }
 
+/* はじめての人のための例の語、ハングルの打ち方 */
+.try { display: flex; flex-direction: column; gap: 10px; }
+.tryChips { display: flex; flex-wrap: wrap; gap: 8px; }
+.tryChip {
+  min-height: 44px; padding: 0 16px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--paper);
+  color: var(--ink); font-size: 18px; font-weight: 500; cursor: pointer;
+}
+.tryChip:hover { border-color: var(--accent); }
+.keyboard { font-size: 13px; color: var(--muted); }
+.keyboard summary { cursor: pointer; color: var(--accent); font-weight: 600; min-height: 32px; display: flex; align-items: center; }
+.keyboard ul { margin: 4px 0 0; padding-left: 18px; line-height: 1.8; }
+
 /* 辞書に無い語 */
 .manual { padding: 16px; border: 1px solid var(--line-2); border-radius: var(--radius); }
 .fields { display: flex; flex-direction: column; gap: 10px; }

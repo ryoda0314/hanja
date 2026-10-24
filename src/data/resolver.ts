@@ -27,10 +27,40 @@ export function resolveLocal(hangul: string): ResolvedWord | null {
   return enrich(matches[0], "seed");
 }
 
-/** ローカルの全候補を返す（同音異義語対応）。 */
+/** よく使う語ほど小さい（한국어기초사전 の 초급 → 중급 → 고급 → 等級なし → 載っていない語）。 */
+export function commonRank(w: Pick<WordData, "lv">): number {
+  return w.lv ?? 5;
+}
+
+/** よく使う語を先に（同じ読み・同じ字の候補を並べるとき）。 */
+const byCommon = (a: WordData, b: WordData) => commonRank(a) - commonRank(b);
+
+/** ローカルの全候補を返す（同音異義語対応。よく使う語が先）。 */
 export function resolveLocalAll(hangul: string): ResolvedWord[] {
   const matches = hangulToWords.get(hangul.trim()) ?? [];
-  return matches.map((w) => enrich(w, "seed"));
+  return [...matches].sort(byCommon).map((w) => enrich(w, "seed"));
+}
+
+// 語のあとに付く形（하다・합니다・하세요 …、助詞）。長いものから試す。
+const ENDINGS = [
+  "하셨습니다", "하겠습니다", "했습니다", "하십시오", "하셨어요", "하세요", "합니다", "했어요", "해요", "하다", "하고", "하는", "한다", "했다", "해서", "해", "한", "할",
+  "스럽다", "스러운", "롭다", "로운", "적으로", "적인", "입니다", "이에요", "예요", "이다", "에서", "에게", "으로", "히", "은", "는", "이", "가", "을", "를", "에", "의", "도", "로", "과", "와", "님", "들",
+];
+
+/**
+ * 辞書にそのままでは無いハングルの、語の部分（안녕하세요 → 안녕、감사합니다 → 감사、공부했어요 → 공부）。
+ * 語尾や助詞を外すと辞書の漢字語になるときだけ、その語と候補を返す。
+ */
+export function resolveStem(input: string): { stem: string; words: ResolvedWord[] } | null {
+  const q = input.trim().replace(/\s+/g, "");
+  if (!/^[가-힣]+$/.test(q) || hangulToWords.has(q)) return null;
+  for (const end of ENDINGS) {
+    if (!q.endsWith(end) || q.length - end.length < 1) continue;
+    const stem = q.slice(0, q.length - end.length);
+    const words = resolveLocalAll(stem);
+    if (words.length) return { stem, words };
+  }
+  return null;
 }
 
 /** 漢字だけでできた入力か（학생 ではなく 學生・学生 と打ったか）。 */
@@ -50,7 +80,10 @@ export function resolveByHanja(input: string): ResolvedWord[] {
     const options = [c, ...(jpToKo.get(c) ?? [])];
     forms = forms.flatMap((f) => options.map((o) => f + o)).slice(0, 64);
   }
-  return [...new Set(forms)].flatMap((f) => (hanjaToWords.get(f) ?? []).map((w) => enrich(w, "seed")));
+  return [...new Set(forms)]
+    .flatMap((f) => hanjaToWords.get(f) ?? [])
+    .sort(byCommon)
+    .map((w) => enrich(w, "seed"));
 }
 
 /**

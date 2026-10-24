@@ -4,12 +4,13 @@ import { discoverWords, unlockedBy, wordKey } from "../data/combine";
 import { splitHanja } from "../data/dataset";
 import { dueWords } from "../data/stage";
 import { glossText } from "../data/gloss";
-import { guessHanja, isHanjaInput, resolveByHanja, resolveLocalAll, resolveManual } from "../data/resolver";
+import { guessHanja, isHanjaInput, resolveByHanja, resolveLocalAll, resolveManual, resolveStem } from "../data/resolver";
 import type { ResolvedWord, WordData } from "../data/types";
 import { t } from "../copy";
 import { addWord, db, type CollectedWord } from "../db";
 import { useChars, useWords } from "../util/live";
 import { Gain } from "../components/Gain";
+import { InstallHint } from "../components/InstallHint";
 import HanjaText from "../components/HanjaText";
 import { Icon } from "../components/Icon";
 import { PairLink } from "../components/Layout";
@@ -25,9 +26,11 @@ import styles from "./Collect.module.css";
 
 type Status =
   | { kind: "idle" }
-  | { kind: "candidates"; byHanja: boolean; words: ResolvedWord[] }
+  // stem：語尾を外すと漢字語になった（안녕하세요 の 안녕）。
+  | { kind: "candidates"; byHanja: boolean; words: ResolvedWord[]; stem?: { from: string; stem: string } }
   | { kind: "resolved"; word: ResolvedWord }
-  | { kind: "notfound"; query: string }
+  // manual：自分で登録する形を開いているか（漢字で打ったときは最初から）。
+  | { kind: "notfound"; query: string; manual: boolean }
   // unlocked：この語をあつめて新しく読めるようになった語（あつめる前の手持ちで数えておく）。
   | { kind: "collected"; word: ResolvedWord; before: number[]; unlocked: WordData[] };
 
@@ -55,15 +58,30 @@ export default function Collect() {
   );
   const due = useMemo(() => dueWords(words ?? [], Date.now()).length, [words]);
 
-  function resolve(e: FormEvent) {
-    e.preventDefault();
-    const q = input.trim().replace(/\s+/g, "");
+  function lookup(raw: string) {
+    const q = raw.trim().replace(/\s+/g, "");
     if (!q) return;
     const byHanja = isHanjaInput(q);
     const found = byHanja ? resolveByHanja(q) : resolveLocalAll(q);
     if (found.length === 1) setStatus({ kind: "resolved", word: found[0] });
     else if (found.length > 1) setStatus({ kind: "candidates", byHanja, words: found });
-    else setStatus({ kind: "notfound", query: q });
+    else {
+      // 안녕하세요・감사합니다 のように打っても、語の部分が漢字語なら見つける。
+      const stem = byHanja ? null : resolveStem(q);
+      if (stem) setStatus({ kind: "candidates", byHanja: false, words: stem.words, stem: { from: q, stem: stem.stem } });
+      else setStatus({ kind: "notfound", query: q, manual: byHanja });
+    }
+  }
+
+  function resolve(e: FormEvent) {
+    e.preventDefault();
+    lookup(input);
+  }
+
+  /** 例の語を押した：打ったのと同じに引く。 */
+  function tryWord(w: string) {
+    setInput(w);
+    lookup(w);
   }
 
   async function collect(word: ResolvedWord) {
@@ -125,14 +143,29 @@ export default function Collect() {
               </button>
             </div>
             <p className={app.note}>{t.collect.hint}</p>
+            {(words?.length ?? 0) < 3 ? (
+              <details className={styles.keyboard}>
+                <summary>{t.collect.keyboard}</summary>
+                <ul>
+                  {t.collect.keyboardHow.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
           </form>
+          {(words?.length ?? 0) < 3 && status.kind === "idle" ? <TryWords onTry={tryWord} /> : null}
         </div>
 
         <div className={app.col}>
           {status.kind === "candidates" ? (
             <section className={styles.block} aria-live="polite">
               <p className={styles.ask}>
-                {status.byHanja ? t.collect.candidatesByHanja(status.words.length) : t.collect.candidates(status.words.length)}
+                {status.stem
+                  ? t.collect.stemFound(status.stem.from, status.stem.stem)
+                  : status.byHanja
+                    ? t.collect.candidatesByHanja(status.words.length)
+                    : t.collect.candidates(status.words.length)}
               </p>
               <ul className={app.plainList}>
                 {status.words.map((w) => (
@@ -158,7 +191,13 @@ export default function Collect() {
             />
           ) : null}
 
-          {status.kind === "notfound" ? <Manual query={status.query} roots={roots} onCollect={collect} /> : null}
+          {status.kind === "notfound" ? (
+            status.manual ? (
+              <Manual query={status.query} roots={roots} onCollect={collect} />
+            ) : (
+              <NotKanjiWord query={status.query} onTry={tryWord} onManual={() => setStatus({ ...status, manual: true })} />
+            )
+          ) : null}
 
           {status.kind === "collected" ? (
             <Collected
@@ -178,7 +217,7 @@ export default function Collect() {
               {readable.length > 0 || due > 0 ? (
                 <div className={styles.cards}>
                   {readable.length > 0 ? (
-                    <Link to="/find" className={styles.readable}>
+                    <Link to="/find?view=read" className={styles.readable}>
                       <span className={styles.readableText}>
                         <span className={styles.readableTitle}>{t.collect.readable(readable.length)}</span>
                         <span className={app.note}>{t.collect.readableNote}</span>
@@ -203,6 +242,7 @@ export default function Collect() {
                   ) : null}
                 </div>
               ) : null}
+              {(words?.length ?? 0) >= 3 ? <InstallHint /> : null}
               <section>
                 <div className={app.listHead}>
                   <h2>{t.collect.recent}</h2>
@@ -256,6 +296,42 @@ function Names({ word }: { word: Pick<WordData, "hangul" | "hanja" | "gloss"> })
         </p>
       ) : null}
     </>
+  );
+}
+
+/** はじめての人のための、押せば引ける例の語（韓国語のキーボードが無くても試せる）。 */
+function TryWords({ onTry }: { onTry: (w: string) => void }) {
+  return (
+    <section className={styles.try} aria-labelledby="try-title">
+      <h2 id="try-title" className="label">
+        {t.collect.tryLabel}
+      </h2>
+      <div className={styles.tryChips}>
+        {t.collect.tryWords.map((w) => (
+          <button key={w} type="button" className={`${styles.tryChip} t-ko`} lang="ko" onClick={() => onTry(w)}>
+            {w}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * ハングルで打った語が辞書の漢字語に無い：たいていは固有語（사랑・하늘）。何を集めるアプリかを言い、例の語を出す。
+ * 辞書に無い漢字語のこともあるので、自分で登録する形も開ける。
+ */
+function NotKanjiWord({ query, onTry, onManual }: { query: string; onTry: (w: string) => void; onManual: () => void }) {
+  return (
+    <section className={styles.block} aria-live="polite">
+      <p className={styles.ask}>{t.collect.notKanji(query)}</p>
+      <p className={app.note}>{t.collect.notKanjiLead}</p>
+      <TryWords onTry={onTry} />
+      <button type="button" className={app.quietAction} onClick={onManual}>
+        {t.collect.manualOpen}
+        <Icon name="arrow" size={16} />
+      </button>
+    </section>
   );
 }
 

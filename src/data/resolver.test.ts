@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { jpForm } from "./dataset";
-import { enrich, guessHanja, isHanjaInput, resolveByHanja, resolveLocal, resolveManual } from "./resolver";
+import { commonRank, enrich, guessHanja, isHanjaInput, resolveByHanja, resolveLocal, resolveManual, resolveStem } from "./resolver";
 
 describe("resolveLocal", () => {
   it("種語彙の語を漢字・構成漢字つきで解決する", () => {
@@ -81,5 +81,26 @@ describe("guessHanja", () => {
   it("どこかの音節を読む字を集めていなければ空", () => {
     expect(guessHanja("한국인", ["韓", "國"])).toEqual([]);
     expect(guessHanja("abc", ["韓"])).toEqual([]);
+  });
+});
+
+describe("resolveStem", () => {
+  it("語尾や助詞を外すと漢字語になるなら、その語を返す", () => {
+    expect(resolveStem("학생이에요")?.stem).toBe("학생");
+    expect(resolveStem("운동했어요")?.words[0].hanja).toBe("運動");
+    expect(resolveStem("시간에")?.stem).toBe("시간");
+  });
+
+  it("辞書にそのままある語や、外しても語にならない語は null", () => {
+    expect(resolveStem("학생")).toBeNull();
+    expect(resolveStem("사랑")).toBeNull();
+    expect(resolveStem("學生")).toBeNull();
+  });
+});
+
+describe("commonRank", () => {
+  it("한국어기초사전 の等級が低いほど先（載っていない語は最後）", () => {
+    expect(commonRank({ lv: 1 })).toBeLessThan(commonRank({ lv: 3 }));
+    expect(commonRank({ lv: 4 })).toBeLessThan(commonRank({}));
   });
 });

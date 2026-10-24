@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { discoverWords, nearWords, unlockedBy, unlockers, wordKey } from "../data/combine";
 import { getCharData } from "../data/dataset";
 import { dueWords } from "../data/stage";
@@ -16,13 +16,16 @@ import { TryRead } from "./TryRead";
 
 type View = "meet" | "read" | "readable" | "near";
 const VIEWS: View[] = ["meet", "read", "readable", "near"];
+/** 戻るボタンで、直に開いたときに戻る先。 */
+const PARENT: Record<View, View> = { meet: "meet", readable: "meet", near: "meet", read: "readable" };
 type Word = Pick<WordData, "hangul" | "hanja" | "gloss">;
 
 const PAGE = 40;
 
 /**
- * 見つける：文の中で出会う（ことのあめ の例文の雨）、集めた字だけでできた語を読んでみる、読める語の一覧、
- * あと1字で読める語。読みたい語は開いて、自分で打ってあつめる。
+ * 見つける：開くと、文の中で出会う（ことのあめ の例文の雨）。雨のあとに、ほかの見つけ方として
+ * 集めた字だけで読める語（そこから読んでみる）と、あと1字で読める語。どちらも戻るボタンの付いた画面で開く。
+ * 読みたい語は開いて、自分で打ってあつめる。
  */
 export default function Find() {
   const [params, setParams] = useSearchParams();
@@ -38,36 +41,56 @@ export default function Find() {
   const near = useMemo(() => nearWords(collected, ownedKeys), [collected, ownedKeys]);
   const due = useMemo(() => new Set(dueWords(words ?? [], Date.now()).map(wordKey)), [words]);
 
-  function show(next: View) {
-    setParams(next === "meet" ? {} : { view: next }, { replace: true });
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  function open(next: View) {
+    setParams(next === "meet" ? {} : { view: next });
+    window.scrollTo({ top: 0 });
   }
+
+  function back() {
+    // 雨や一覧から来たなら戻る。直に開いたときは一つ上の画面に置き換える。
+    if (location.key !== "default") navigate(-1);
+    else setParams(PARENT[view] === "meet" ? {} : { view: PARENT[view] }, { replace: true });
+  }
+
+  const loaded = chars !== undefined && words !== undefined;
+  const count = view === "readable" ? readable.length : view === "near" ? near.length : null;
 
   return (
     <>
       <header className={app.subbar}>
-        <h1 className={app.subtitleStrong}>{t.find.title}</h1>
+        {view === "meet" ? (
+          <h1 className={app.subtitleStrong}>{t.find.title}</h1>
+        ) : (
+          <>
+            <button type="button" className={app.iconLink} onClick={back} aria-label={t.common.back}>
+              <Icon name="back" size={22} />
+            </button>
+            <h1 className={`${app.subtitleStrong} ${app.withBack}`}>{t.find.views[view]}</h1>
+            {loaded && count !== null ? <span className={app.subCount}>{t.common.words(count)}</span> : null}
+          </>
+        )}
       </header>
       <div className={app.bodyTight}>
-        {chars === undefined || words === undefined ? null : (
+        {!loaded ? null : (
           <>
-            <nav className={app.views} aria-label={t.find.viewsLabel}>
-              {VIEWS.map((v) => (
-                <button key={v} type="button" className={app.view} aria-pressed={view === v} onClick={() => show(v)}>
-                  {t.find.views[v]}
-                </button>
-              ))}
-            </nav>
             {view === "meet" ? (
-              sentences === undefined ? (
-                <p className={app.note}>{t.meet.loading}</p>
-              ) : sentences === null ? (
-                <p className={app.error}>{t.meet.failed}</p>
-              ) : (
-                <Meet data={sentences} collected={collected} owned={ownedKeys} due={due} onOpen={setSheet} />
-              )
+              <>
+                {sentences === undefined ? (
+                  <p className={app.note}>{t.meet.loading}</p>
+                ) : sentences === null ? (
+                  <p className={app.error}>{t.meet.failed}</p>
+                ) : (
+                  <Meet data={sentences} collected={collected} owned={ownedKeys} due={due} onOpen={setSheet} />
+                )}
+                {collected.size > 0 ? <Paths readable={readable.length} near={near.length} onOpen={open} /> : null}
+                {sentences ? <p className={app.note}>{t.meet.source}</p> : null}
+              </>
             ) : null}
-            {view === "read" ? <TryRead pool={readable} onNear={() => show("near")} /> : null}
-            {view === "readable" ? <Readable words={readable} onOpen={setSheet} /> : null}
+            {view === "read" ? <TryRead pool={readable} onNear={() => open("near")} /> : null}
+            {view === "readable" ? <Readable words={readable} onRead={() => open("read")} onOpen={setSheet} /> : null}
             {view === "near" ? (
               <Near near={near} gain={(w) => unlockedBy(w, collected, ownedKeys).length} onOpen={setSheet} />
             ) : null}
@@ -79,8 +102,49 @@ export default function Find() {
   );
 }
 
-/** 集めた字だけで読める語。字で絞り込める。 */
-function Readable({ words, onOpen }: { words: (WordData & { chars: string[] })[]; onOpen: (w: Word) => void }) {
+/** 雨のあとの、ほかの見つけ方（語の数つき）。 */
+function Paths({ readable, near, onOpen }: { readable: number; near: number; onOpen: (v: View) => void }) {
+  const rows = [
+    { view: "readable" as const, count: readable, note: t.find.pathReadable },
+    { view: "near" as const, count: near, note: t.find.pathNear },
+  ];
+  return (
+    <section className={styles.paths} aria-labelledby="paths-title">
+      <h2 id="paths-title" className={`label ${styles.pathsTitle}`}>
+        {t.find.paths}
+      </h2>
+      <ul className={app.plainList}>
+        {rows.map((r) => (
+          <li key={r.view}>
+            <button type="button" className={styles.path} onClick={() => onOpen(r.view)}>
+              <span className={styles.pathText}>
+                <span className={styles.pathTitle}>
+                  {t.find.views[r.view]}
+                  <span className={styles.pathCount}>{t.common.words(r.count)}</span>
+                </span>
+                <span className={styles.pathNote}>{r.note}</span>
+              </span>
+              <span className={styles.chev}>
+                <Icon name="back" size={18} />
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** 集めた字だけで読める語。上から 読んでみる へ。字で絞り込める。 */
+function Readable({
+  words,
+  onRead,
+  onOpen,
+}: {
+  words: (WordData & { chars: string[] })[];
+  onRead: () => void;
+  onOpen: (w: Word) => void;
+}) {
   const [focus, setFocus] = useState<string | null>(null);
   const [limit, setLimit] = useState(PAGE);
   const counts = useMemo(() => {
@@ -94,6 +158,13 @@ function Readable({ words, onOpen }: { words: (WordData & { chars: string[] })[]
   return (
     <section className={app.stackSm}>
       <p className={app.lead}>{t.find.lead}</p>
+      <div className={`${app.panel} ${styles.readPanel}`}>
+        <p className={app.note}>{t.find.readPanel}</p>
+        <button type="button" className={`btn ${styles.readStart}`} onClick={onRead}>
+          {t.find.views.read}
+          <Icon name="arrow" size={18} />
+        </button>
+      </div>
       <div className={app.filters} role="group" aria-label={t.find.filterLabel}>
         <Chip on={focus === null} onClick={() => setFocus(null)} label={t.find.all} count={words.length} />
         {counts.map(([c, n]) => (

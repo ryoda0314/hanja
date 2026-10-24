@@ -8,7 +8,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["icons/icon-192.png", "icons/icon-512.png", "icons/maskable-512.png", "sister/kotonoame.png"],
+      includeAssets: ["icons/icon-192.png", "icons/icon-512.png", "icons/maskable-512.png", "icons/apple-touch-icon.png", "sister/kotonoame.png"],
       manifest: {
         name: "ことのね",
         short_name: "ことのね",
@@ -28,6 +28,8 @@ export default defineConfig({
       workbox: {
         // アプリシェル＋辞書データ（words.json 等）をプリキャッシュしてオフライン動作させる。
         globPatterns: ["**/*.{js,css,html,woff2,png,svg,json}"],
+        // リンクのカードの絵は、アプリの中では使わない。
+        globIgnores: ["og.png"],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         navigateFallback: "index.html",
         runtimeCaching: [

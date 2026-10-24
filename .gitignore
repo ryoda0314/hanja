@@ -23,3 +23,5 @@ scripts/.cache
 
 # デザイン確認用スクリーンショット
 .shots
+
+# 紹介映像（promo/ は別のプロジェクト。書き出しや取ってきた字・音は promo/.gitignore で外す）

@@ -3,7 +3,7 @@
 // 造語の自動生成は行わず、辞書（将来はオンライン辞書キャッシュ）に存在する語のみを対象とする。
 
 import { charMap, charToWords, hangulToWords, hanjaToWords, splitHanja } from "./dataset";
-import { enrich } from "./resolver";
+import { commonRank, enrich } from "./resolver";
 import type { ResolvedWord, WordData } from "./types";
 
 /** 語を一意に表すキー。同音異義語（사기 詐欺 / 사기 士氣）を別の語として扱うため漢字表記も含める。 */
@@ -36,9 +36,11 @@ function easeLength(w: WordData): number {
   return n === 1 ? 99 : n;
 }
 
-/** 読みやすい順：字数の少ない語（1字語は最後）→ 基礎漢字だけでできた語 → 가나다順。 */
+/** 読みやすい順：1字語は最後 → よく使う語 → 字数の少ない語 → 基礎漢字だけでできた語 → 가나다順。 */
 export function byEase(a: WordData, b: WordData): number {
   return (
+    Number(easeLength(a) === 99) - Number(easeLength(b) === 99) ||
+    commonRank(a) - commonRank(b) ||
     easeLength(a) - easeLength(b) ||
     Number(allBasic(b)) - Number(allBasic(a)) ||
     a.hangul.localeCompare(b.hangul, "ko")

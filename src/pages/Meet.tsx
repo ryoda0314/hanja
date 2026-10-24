@@ -131,7 +131,6 @@ export function Meet({
       <button type="button" className="btn" onClick={next}>
         {t.meet.next}
       </button>
-      <p className={app.note}>{t.meet.source}</p>
     </section>
   );
 }

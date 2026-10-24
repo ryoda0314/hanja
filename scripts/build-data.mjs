@@ -11,7 +11,7 @@
 //     - jmdict/jmdict-eng-*.json … JMdict（EDRDG、CC BY-SA 4.0。jmdict-simplified の JSON）。日本語にも同じ漢字の語があるか
 //     - src/data/curated-*.json … 手作業キュレーション（音訓・日本語訳）。生成データより優先。
 //   出力:
-//     - public/data/words.json       … 漢字語リスト {hangul, hanja, hanjaJp?, gloss}
+//     - public/data/words.json       … 漢字語リスト {hangul, hanja, hanjaJp?, gloss, lv?}（lv: 한국어기초사전 の等級 1〜4）
 //     - public/data/hanja-chars.json … 漢字テーブル
 //         {char, jp?, readings:[{eum,hun?}], meaning, strokes, edu?, on?, kun?}
 //
@@ -291,6 +291,9 @@ function jaItem(raw) {
 }
 
 const jaGloss = new Map(); // hangul|hanja -> "よみ【表記】、…"
+// 学ぶ順の目安（한국어기초사전 の語彙等級）：1 초급・2 중급・3 고급・4 等級なし。同音語や読める語の並びで、よく使う語を先に。
+const LEVELS = { 초급: 1, 중급: 2, 고급: 3, 없음: 4 };
+const levelOf = new Map(); // hangul|hanja -> 1..4
 {
   const itemsByKey = new Map();
   for (const file of fs.readdirSync(KRDICT).filter((f) => f.endsWith(".xml")).sort((a, b) => parseInt(a) - parseInt(b))) {
@@ -303,6 +306,8 @@ const jaGloss = new Map(); // hangul|hanja -> "よみ【表記】、…"
       const hanja = unescapeXml(origin).normalize("NFC");
       if (!isHangul(hangul) || !isHanja(hanja) || cp(hangul).length !== cp(hanja).length) continue;
       const key = `${hangul}|${hanja}`;
+      const level = LEVELS[block.match(/<feat att="vocabularyLevel" val="([^"]*)"/)?.[1]] ?? 4;
+      levelOf.set(key, Math.min(levelOf.get(key) ?? 4, level));
       const items = itemsByKey.get(key) ?? [];
       // はじめの3つの意味まで
       for (const sense of block.split("<Sense ").slice(1, 4)) {
@@ -411,12 +416,83 @@ for (const w of curatedWords) {
   wordMap.set(key, { ...w, gloss: jaGloss.get(key) ?? w.gloss });
 }
 const words = [...wordMap.values()].sort((a, b) => a.hangul.localeCompare(b.hangul));
+for (const w of words) {
+  const lv = levelOf.get(`${w.hangul}|${w.hanja}`);
+  if (lv) w.lv = lv;
+}
 const jaCount = words.filter((w) => /[ぁ-ゖァ-ヺ一-鿿]/.test(w.gloss)).length;
 console.log(`  日本語の意味: ${jaCount} / ${words.length} 語`);
 // 各語に日本の新字体表記（字形が異なる場合のみ）を付与。
 for (const w of words) {
   const jp = toShinjitai(w.hanja);
   if (jp !== w.hanja) w.hanjaJp = jp;
+}
+
+// --- 5.5) 字の音読みを、よく使う順に -------------------------------------------
+// Unihan kJapanese の並びは、使う多さの順とは限らない（體 は テイ・タイ、腦 は ドウ・ノウ）。日本語の対訳のうち、韓国語の
+// 語と同じ漢字の語（체육 の たいいく【体育】）の よみ を字ごとの音読みに分け（連濁・促音も見る）、いちばん多く使われる
+// 音読みが、いまの一つ目の倍以上（2語以上）使われていれば先頭に出す。
+{
+  const kata2hira = (s) => s.replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60));
+  const VOICED = { か: "が", き: "ぎ", く: "ぐ", け: "げ", こ: "ご", さ: "ざ", し: "じ", す: "ず", せ: "ぜ", そ: "ぞ", た: "だ", ち: "ぢ", つ: "づ", て: "で", と: "ど", は: "ば", ひ: "び", ふ: "ぶ", へ: "べ", ほ: "ぼ" };
+  const SEMI = { は: "ぱ", ひ: "ぴ", ふ: "ぷ", へ: "ぺ", ほ: "ぽ" };
+  /** 語の中での音読みの形（連濁・半濁音、末の く・つ・ち・き の促音）。 */
+  const shapes = (r) => {
+    const out = new Set([r]);
+    if (VOICED[r[0]]) out.add(VOICED[r[0]] + r.slice(1));
+    if (SEMI[r[0]]) out.add(SEMI[r[0]] + r.slice(1));
+    for (const v of [...out]) if (/[くつちき]$/.test(v)) out.add(`${v.slice(0, -1)}っ`);
+    return [...out];
+  };
+  const allOn = (ch) => (japaneseMap.get(ch) ?? "").split(" ").filter((t) => /^[゠-ヿ]+$/.test(t));
+  /** よみ を字の並びの音読みに分ける（字ごとの音読み。分けられなければ null）。 */
+  const segment = (chars, reading) => {
+    const memo = new Map();
+    const go = (i, at) => {
+      if (i === chars.length) return at === reading.length ? [] : null;
+      const key = `${i}:${at}`;
+      if (memo.has(key)) return memo.get(key);
+      let found = null;
+      for (const on of allOn(chars[i])) {
+        for (const shape of shapes(kata2hira(on))) {
+          const rest = reading.startsWith(shape, at) ? go(i + 1, at + shape.length) : null;
+          if (rest) {
+            found = [on, ...rest];
+            break;
+          }
+        }
+        if (found) break;
+      }
+      memo.set(key, found);
+      return found;
+    };
+    return go(0, 0);
+  };
+  const used = new Map(); // 字 -> Map(音読み -> 語の数)
+  for (const w of words) {
+    const chars = cp(w.hanja);
+    if (chars.length < 2) continue;
+    const jp = w.hanjaJp ?? w.hanja;
+    for (const m of w.gloss.matchAll(/([ぁ-ゖー]+)【([^【】]+)】/g)) {
+      if (m[2] !== jp) continue;
+      const seg = segment(chars, m[1]);
+      if (!seg) continue;
+      chars.forEach((ch, i) => {
+        const counts = used.get(ch) ?? used.set(ch, new Map()).get(ch);
+        counts.set(seg[i], (counts.get(seg[i]) ?? 0) + 1);
+      });
+    }
+  }
+  let moved = 0;
+  for (const c of charTable) {
+    const counts = used.get(c.char);
+    if (!counts || !c.on?.length) continue;
+    const [best, n] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+    if (best === c.on[0] || n < 2 || n < 2 * (counts.get(c.on[0]) ?? 0)) continue;
+    c.on = [best, ...c.on.filter((x) => x !== best)].slice(0, 3);
+    moved++;
+  }
+  console.log(`  音読みの並びを、よく使う順に直した字: ${moved} 字`);
 }
 
 // --- 6) 出力 ----------------------------------------------------------------

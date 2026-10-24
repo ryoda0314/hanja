@@ -43,6 +43,8 @@ export interface WordData {
    * 無ければ英語。出すときは glossText（伏せている間は maskedGlossText）で。
    */
   gloss: string;
+  /** 学ぶ順の目安（한국어기초사전 の語彙等級）：1 초급・2 중급・3 고급・4 等級なし。辞書に無い語は無し。 */
+  lv?: number;
 }
 
 /** 解決済みの漢字語（語 + 構成漢字の読み付き）。resolver の出力。 */

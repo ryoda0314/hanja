@@ -136,7 +136,22 @@ async function putWord(
  * すでに同じ語が存在する場合は false を返す（何もしない）。
  */
 export async function addWord(word: ResolvedWord): Promise<boolean> {
-  return db.transaction("rw", db.words, db.chars, () => putWord(word, Date.now()));
+  const added = await db.transaction("rw", db.words, db.chars, () => putWord(word, Date.now()));
+  if (added) void askPersist();
+  return added;
+}
+
+let persistAsked = false;
+
+/** 集めた語をブラウザに消されにくくするよう頼む（語を集めたときに一度だけ。対応していなければ何もしない）。 */
+async function askPersist(): Promise<void> {
+  if (persistAsked || typeof navigator === "undefined" || !navigator.storage?.persist) return;
+  persistAsked = true;
+  try {
+    if (!(await navigator.storage.persisted())) await navigator.storage.persist();
+  } catch {
+    /* 頼めなくても、集めた語はそのまま */
+  }
 }
 
 /** 覚え具合の出来事だけを取り出す（数でないものは捨てる）。 */
