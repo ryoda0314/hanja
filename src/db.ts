@@ -6,6 +6,7 @@ import Dexie, { type EntityTable } from "dexie";
 import type { ResolvedWord } from "./data/types";
 import { hanjaToWords, splitHanja } from "./data/dataset";
 import { metUpdate, readUpdate, type WordProgress } from "./data/stage";
+import { countUsage } from "./util/usage";
 
 /** ユーザーが集めた漢字語1件。覚え具合の出来事（WordProgress）も持つ（前の版の語には無い）。 */
 export interface CollectedWord extends WordProgress {
@@ -137,7 +138,10 @@ async function putWord(
  */
 export async function addWord(word: ResolvedWord): Promise<boolean> {
   const added = await db.transaction("rw", db.words, db.chars, () => putWord(word, Date.now()));
-  if (added) void askPersist();
+  if (added) {
+    void askPersist();
+    countUsage("collect");
+  }
   return added;
 }
 
@@ -206,6 +210,7 @@ export async function recordRead(key: { hangul: string; hanja: string }, ok: boo
     const w = await db.words.get({ hangul: key.hangul, hanja: key.hanja.normalize("NFC") });
     if (w) await db.words.update(w.id, readUpdate(w, ok, at));
   });
+  if (ok) countUsage("read");
 }
 
 /**

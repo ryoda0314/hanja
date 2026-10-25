@@ -141,6 +141,18 @@ node scripts/build-sentences.mjs --kotonoame <ことのあめ のリポジトリ
   漢字表記の決まらない語がないか、ことのあめ と同じ くだけた話しことばか を確かめる。
 - 今の `public/data/sentences.json` は作業ファイル（下書き）から作ったもの。査読済みの文に替えるときは上の書き出しから。
 
+## 使われ方の数（管理者）
+
+何人が使っているかだけを、姉妹アプリ ことのあめ の Supabase に数える（`src/util/usage.ts`）。送るのは、端末ごとの番号
+（その端末で作った乱数）と、日ごとの 開いた・あつめた・読めた の回数と、ホーム画面から開いたかだけ。集めた語は送らない。
+自分 の「使われ方の数を送る」で止められる。送り先は `.env` の `VITE_SUPABASE_URL`・`VITE_SUPABASE_ANON_KEY`
+（ことのあめ と同じ、公開してよい値。空なら送らない）。
+
+- 表と関数は `supabase/usage.sql`（名前は `kn_` で始める。ことのあめ は `pl_`、旧アプリの表には触れない）。
+  当てるのは ことのあめ のリポジトリで：`node --env-file=.env.local scripts/migrate.mjs ../作成したもの/hanjaatume/supabase/usage.sql`
+- 見る：`node --env-file=../../polylinga/.env.local scripts/usage.mjs [日数]`（service role で読む）か、Supabase の画面の `kn_stats`。
+- 人数は端末の数。iPhone は Safari とホーム画面のアプリで記録が別なので、追加した人は2台に数えることがある。
+
 ## アイコン
 
 元の絵は `scripts/icon/icon-source.png`（ChatGPT で描いたもの、1254×1254・全面に紙の色）。差し替えたら

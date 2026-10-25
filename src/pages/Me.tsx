@@ -8,6 +8,8 @@ import HanjaText from "../components/HanjaText";
 import { Icon } from "../components/Icon";
 import { SpeakButton } from "../components/SpeakButton";
 import { useChars, useWords } from "../util/live";
+import { usePref } from "../util/local";
+import { SEND_PREF } from "../util/usage";
 import { useKoreanVoice } from "../util/speech";
 import app from "../app.module.css";
 import styles from "./Me.module.css";
@@ -39,6 +41,7 @@ export default function Me() {
   const words = useWords();
   const chars = useChars();
   const { script, setScript, accent, setAccent, rate, setRate } = usePrefs();
+  const [sendUsage, setSendUsage] = usePref(SEND_PREF, true);
   const voice = useKoreanVoice();
   const [dataNote, setDataNote] = useState<{ ok: boolean; text: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -171,6 +174,11 @@ export default function Me() {
               {dataNote.text}
             </p>
           ) : null}
+          <label className={styles.toggle}>
+            <input type="checkbox" checked={sendUsage} onChange={(e) => setSendUsage(e.target.checked)} />
+            {t.me.usage}
+          </label>
+          <p className={app.note}>{t.me.usageNote}</p>
         </section>
 
         <section className={styles.section}>
