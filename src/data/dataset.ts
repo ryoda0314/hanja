@@ -9,6 +9,7 @@
 
 import curatedCharsJson from "./curated-chars.json";
 import curatedWordsJson from "./curated-words.json";
+import type { ScriptPref } from "../prefs";
 import type { HanjaCharData, WordData } from "./types";
 
 const curatedChars = curatedCharsJson as HanjaCharData[];
@@ -106,6 +107,11 @@ export function jpForm(hanja: string): string {
   return Array.from(hanja.normalize("NFC"))
     .map((c) => charMap.get(c)?.jp ?? c)
     .join("");
+}
+
+/** 字1字を、字形の設定に合わせて。日本の字なら新字体（學 → 学）、韓国の字・両方なら韓国の字のまま。 */
+export function glyphOf(char: string, script: ScriptPref): string {
+  return script === "ja" ? (charMap.get(char)?.jp ?? char) : char;
 }
 
 /** 基礎漢字（1800字）の辞書エントリ。全データの読込後に中身がそろう。 */

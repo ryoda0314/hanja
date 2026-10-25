@@ -29,6 +29,7 @@ const CREDITS = [
   { name: "kengdic", by: "Joe Speigle / Nathan Glenn", license: "CC BY-SA 3.0", url: "https://github.com/garfieldnate/kengdic" },
   { name: "Unihan Database", by: "Unicode, Inc.", license: "Unicode License v3", url: "https://www.unicode.org/charts/unihan.html" },
   { name: "kyujitai", by: "hakatashi", license: "MIT", url: "https://github.com/hakatashi/kyujitai.js" },
+  { name: "FrequencyWords", by: "Hermit Dave（OpenSubtitles）", license: "CC BY-SA 4.0", url: "https://github.com/hermitdave/FrequencyWords" },
   { name: "ことのあめ の例文", by: "姉妹アプリ", license: "文で出会う の文と日本語訳", url: SISTER_URL },
 ];
 

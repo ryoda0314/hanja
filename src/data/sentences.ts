@@ -3,6 +3,7 @@
 // 辞書と違って起動時には読まず、使う画面が開いたときに一度だけ読む。
 
 import { hanjaToWords, splitHanja } from "./dataset";
+import { commonRank } from "./resolver";
 import type { WordData } from "./types";
 
 /** 文の中の漢字語の印。start / end は ko の中の位置（UTF-16）。 */
@@ -99,17 +100,61 @@ export function markStatus(
 
 const NONE: ReadonlySet<string> = new Set();
 
+/** 語の等級（한국어기초사전 の 초급 1・중급 2・고급 3。等級の無い語は字幕での頻度から。ほとんど使わない語は 4）。 */
+export type LevelOf = (m: Pick<SentenceMark, "hangul" | "hanja">) => number;
+
+/** 辞書から語の等級を引く（resolver の commonRank）。 */
+export const dictLevel: LevelOf = (m) => {
+  const w = hanjaToWords.get(m.hanja)?.find((x) => x.hangul === m.hangul);
+  return w ? Math.min(commonRank(w), 4) : 4;
+};
+
+/** この等級の語を何語集めたら、その等級の文をふつうに出すか。 */
+const ENOUGH = 30;
+
+/**
+ * 学ぶ人の段階：集めた語が30語以上ある、いちばん上の等級（無ければ 1＝초급）。
+ * 集めた語に 중급 の語が増えてくれば、중급 のまだの語が入った文もふつうに降る。
+ */
+export function learnerLevel(owned: Iterable<string>, levelOf: LevelOf = dictLevel): number {
+  const counts = [0, 0, 0, 0, 0];
+  for (const k of owned) {
+    const [hangul, hanja] = k.split("|");
+    counts[levelOf({ hangul, hanja })]++;
+  }
+  let level = 1;
+  for (let lv = 2; lv <= 4; lv++) if (counts[lv] >= ENOUGH) level = lv;
+  return level;
+}
+
+export interface ScoreOptions {
+  /** ふりかえりどきの集めた語（hangul|hanja）。 */
+  due?: ReadonlySet<string>;
+  /** 学ぶ人の段階（learnerLevel）。 */
+  level?: number;
+  levelOf?: LevelOf;
+}
+
 /**
  * 文の点：集めた語ほど高く（また出会う）、読める語、知っている字の入った語の順。
  * ふりかえりどきの集めた語（due）はもう少し高く、文の中でまた出会いやすくする。
+ * まだ読めない語が学ぶ人の段階より上の等級なら、上の分だけ下げる（はじめたばかりの人に 고급 の語の文を降らせない）。
  */
-export function sentenceScore(s: Sentence, collected: Set<string>, owned: Set<string>, due: ReadonlySet<string> = NONE): number {
+export function sentenceScore(
+  s: Sentence,
+  collected: Set<string>,
+  owned: Set<string>,
+  { due = NONE, level = 1, levelOf = dictLevel }: ScoreOptions = {}
+): number {
   let score = 0;
   for (const m of s.marks) {
     const status = markStatus(m, collected, owned);
     if (status === "owned") score += due.has(key(m.hangul, m.hanja)) ? 5 : 3;
     else if (status === "readable") score += 2;
-    else if (splitHanja(m.hanja).some((c) => collected.has(c))) score += 1;
+    else {
+      if (splitHanja(m.hanja).some((c) => collected.has(c))) score += 1;
+      score -= Math.max(0, levelOf(m) - level);
+    }
   }
   return score;
 }
@@ -119,20 +164,23 @@ export interface RainOptions {
   size?: number;
   /** ふりかえりどきの集めた語（hangul|hanja）。 */
   due?: ReadonlySet<string>;
+  levelOf?: LevelOf;
   random?: () => number;
 }
 
 /**
  * ひと雨ぶんの文を選ぶ。まだ出していない文を混ぜてから点の高い順に並べ、上のほうから size 文。
  * 点が同じなら毎回違う文になる。出していない文が足りなければ、出した文もまた使う。
+ * 点は、集めた語から求めた学ぶ人の段階に合わせる（sentenceScore）。
  */
 export function pickRain(
   list: readonly Sentence[],
   collected: Set<string>,
   owned: Set<string>,
   seen: Set<number>,
-  { size = 4, due = NONE, random = Math.random }: RainOptions = {}
+  { size = 4, due = NONE, levelOf = dictLevel, random = Math.random }: RainOptions = {}
 ): Sentence[] {
+  const level = learnerLevel(owned, levelOf);
   let pool = list.filter((s) => !seen.has(s.id));
   if (pool.length < size) pool = [...list];
   // 混ぜる（Fisher–Yates）→ 点で安定に並べる。上位から少しだけ散らして選ぶ。
@@ -141,7 +189,7 @@ export function pickRain(
     [pool[i], pool[j]] = [pool[j], pool[i]];
   }
   const scored = pool
-    .map((s) => ({ s, score: sentenceScore(s, collected, owned, due) }))
+    .map((s) => ({ s, score: sentenceScore(s, collected, owned, { due, level, levelOf }) }))
     .sort((a, b) => b.score - a.score)
     .slice(0, Math.max(size * 4, 16));
   const out: Sentence[] = [];

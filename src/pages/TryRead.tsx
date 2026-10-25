@@ -1,9 +1,10 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { wordKey, type DiscoverResult } from "../data/combine";
-import { getCharData, jpForm, splitHanja } from "../data/dataset";
-import { compareSyllables, isSameReading, pickToRead, readingNotes } from "../data/reading";
+import { getCharData, glyphOf, jpForm, splitHanja } from "../data/dataset";
+import { compareSyllables, isSameReading, pickToRead, readingNotes, usualReading } from "../data/reading";
 import { glossText } from "../data/gloss";
 import { enrich } from "../data/resolver";
+import { commonRank } from "../data/resolver";
 import { wordStage, type Stage } from "../data/stage";
 import type { WordData } from "../data/types";
 import { t } from "../copy";
@@ -23,22 +24,24 @@ import styles from "./TryRead.module.css";
  * 読んでみる：集めた字だけでできた、まだ習っていない語を、漢字だけ見せる。字の音をつなげてハングルで打ち、
  * 合っていればそのまま集まる（打つ一手間が「写す」でなく「組み立てる」になる）。
  * 点数も連続記録もない。字を押せばその字の音、「答えを見る」でいつでも答え（ことのあめ の「言ってみる」と同じ段）。
+ * 出す語は、学ぶ人の段階（level：集めた語の等級）の一つ上の等級までから。無くなれば、まれな語も。
  */
-export function TryRead({ pool, onNear }: { pool: DiscoverResult[]; onNear: () => void }) {
+export function TryRead({ pool, level, onNear }: { pool: DiscoverResult[]; level: number; onNear: () => void }) {
+  const fits = (w: DiscoverResult) => commonRank(w) <= level + 1;
   // このひとときに出した語（同じ語が続かないように）。開き直すとまた出る：忘れても、また出会う。
   const [seen, setSeen] = useState<Set<string>>(() => new Set());
-  const [current, setCurrent] = useState<DiscoverResult | null>(() => pickToRead(pool, () => false));
+  const [current, setCurrent] = useState<DiscoverResult | null>(() => pickToRead(pool, () => false, Math.random, fits));
 
   // 読める語がまだ無かったところへ増えたら、最初の語を出す。
   useEffect(() => {
-    if (!current) setCurrent(pickToRead(pool, (w) => seen.has(wordKey(w))));
+    if (!current) setCurrent(pickToRead(pool, (w) => seen.has(wordKey(w)), Math.random, fits));
   }, [current, pool, seen]);
 
   function next() {
     if (!current) return;
     const nextSeen = new Set(seen).add(wordKey(current));
     setSeen(nextSeen);
-    setCurrent(pickToRead(pool, (w) => nextSeen.has(wordKey(w))));
+    setCurrent(pickToRead(pool, (w) => nextSeen.has(wordKey(w)), Math.random, fits));
   }
 
   if (!current) {
@@ -101,6 +104,8 @@ export function ReadCard({
   const [stageAfter, setStageAfter] = useState<Stage | null>(null);
   const notes = readingNotes(word.hangul, word.hanja);
   const jp = jpForm(word.hanja);
+  const syllables = Array.from(word.hangul);
+  const aligned = syllables.length === chars.length;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -142,9 +147,10 @@ export function ReadCard({
     setUndone(true);
   }
 
-  const glyphOf = (c: string) => (script === "ja" ? (getCharData(c)?.jp ?? c) : c);
   // 違った音節の印は、答えを見ているあいだだけ。
   const marks = phase === "answer" && missed ? compareSyllables(missed, word.hangul) : null;
+  // 字のふだんの音をつなげたとおりに読んだのに、この語では読みが変わる字があった（來日 を 래일 と）。
+  const byUsual = missed !== null && notes.length > 0 && isSameReading(missed, usualReading(word.hanja));
 
   return (
     <section className={styles.wrap} aria-live="polite">
@@ -154,7 +160,9 @@ export function ReadCard({
           <div className={styles.card}>
             <ol className={styles.glyphs}>
               {chars.map((c, i) => {
-                const eum = getCharData(c)?.readings[0]?.eum ?? "";
+                // この語での音（來日 の 來 は 내）。ふだんの音と違えば、ふだんの音を小さく添える。
+                const usual = getCharData(c)?.readings[0]?.eum ?? "";
+                const eum = aligned ? syllables[i] : usual;
                 const open = hinted.has(i);
                 return (
                   <li key={i}>
@@ -164,10 +172,11 @@ export function ReadCard({
                       onClick={() => setHinted((h) => new Set(h).add(i))}
                       aria-label={open ? `${c} ${eum}` : c}
                     >
-                      <span className={`hanja ${styles.glyphChar}`}>{glyphOf(c)}</span>
+                      <span className={`hanja ${styles.glyphChar}`}>{glyphOf(c, script)}</span>
                       <span className={`t-ko ${open ? styles.sound : `${styles.sound} ${styles.soundHidden}`}`} lang="ko">
                         {open ? eum : "・"}
                       </span>
+                      {open && usual && usual !== eum ? <span className={styles.usual}>{t.read.usualSound(usual)}</span> : null}
                     </button>
                   </li>
                 );
@@ -195,7 +204,7 @@ export function ReadCard({
                   : t.collect.collectedTitle(word.hangul)}
             </p>
           ) : (
-            <p className="label">{missed ? t.read.missed : t.read.shown}</p>
+            <p className="label">{byUsual ? t.read.missedVariant : missed ? t.read.missed : t.read.shown}</p>
           )}
           {phase === "read" && stageAfter ? (
             <p className={styles.stageAfter}>
@@ -229,7 +238,7 @@ export function ReadCard({
           {notes.length > 0 ? (
             <ul className={styles.notes}>
               {notes.map((n) => (
-                <li key={n.char}>{t.read.variant(n.char, n.usual, n.here)}</li>
+                <li key={n.char}>{t.read.variant(glyphOf(n.char, script), n)}</li>
               ))}
             </ul>
           ) : null}

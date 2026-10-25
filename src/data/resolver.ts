@@ -27,13 +27,31 @@ export function resolveLocal(hangul: string): ResolvedWord | null {
   return enrich(matches[0], "seed");
 }
 
-/** よく使う語ほど小さい（한국어기초사전 の 초급 → 중급 → 고급 → 等級なし → 載っていない語）。 */
-export function commonRank(w: Pick<WordData, "lv">): number {
-  return w.lv ?? 5;
+/**
+ * よく使う度の段（1〜5。よく使う語ほど小さい）。한국어기초사전 の等級（초급 1・중급 2・고급 3）があればそれ。
+ * 無ければ字幕での頻度（fq：100万語あたり）から：2回以上 3・1回以上 4、それ未満は 5（ほとんど使わない語）。
+ * 等級の無い語は、字幕でよく使っても 고급 と同じ段まで（字幕はドラマの語に寄り、綴りの同じ別の語も混じる）。
+ * 頻度の分からない語（手で入れた語・1字の語）は 4。
+ */
+export function commonRank(w: Pick<WordData, "lv" | "fq">): number {
+  if (w.lv && w.lv <= 3) return w.lv;
+  if (w.fq === undefined) return 4;
+  return w.fq >= 2 ? 3 : w.fq >= 1 ? 4 : 5;
+}
+
+/** 人をののしる語。辞書で引けるが、読める語として勧めない。 */
+const SLURS = new Set(["병신|病身", "등신|等神", "창녀|娼女", "매춘부|賣春婦", "백치|白痴", "천치|天痴"]);
+
+/**
+ * 勧めない語：ほとんど使わない語（等級が無く、字幕で100万語に1回も使わない語）と、人をののしる語。
+ * 読める語・あと1字で読める語・あつめると読める語には出さない（あつめる・探す では引ける）。
+ */
+export function isRare(w: Pick<WordData, "hangul" | "hanja" | "lv" | "fq">): boolean {
+  return commonRank(w) === 5 || SLURS.has(`${w.hangul}|${w.hanja}`);
 }
 
 /** よく使う語を先に（同じ読み・同じ字の候補を並べるとき）。 */
-const byCommon = (a: WordData, b: WordData) => commonRank(a) - commonRank(b);
+const byCommon = (a: WordData, b: WordData) => commonRank(a) - commonRank(b) || (b.fq ?? 0) - (a.fq ?? 0);
 
 /** ローカルの全候補を返す（同音異義語対応。よく使う語が先）。 */
 export function resolveLocalAll(hangul: string): ResolvedWord[] {

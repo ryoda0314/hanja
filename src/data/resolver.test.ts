@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { jpForm } from "./dataset";
-import { commonRank, enrich, guessHanja, isHanjaInput, resolveByHanja, resolveLocal, resolveManual, resolveStem } from "./resolver";
+import {
+  commonRank,
+  enrich,
+  guessHanja,
+  isHanjaInput,
+  isRare,
+  resolveByHanja,
+  resolveLocal,
+  resolveManual,
+  resolveStem,
+} from "./resolver";
 
 describe("resolveLocal", () => {
   it("種語彙の語を漢字・構成漢字つきで解決する", () => {
@@ -98,9 +108,24 @@ describe("resolveStem", () => {
   });
 });
 
-describe("commonRank", () => {
-  it("한국어기초사전 の等級が低いほど先（載っていない語は最後）", () => {
+describe("commonRank / isRare", () => {
+  it("한국어기초사전 の等級があればそれ（초급 が先）", () => {
     expect(commonRank({ lv: 1 })).toBeLessThan(commonRank({ lv: 3 }));
-    expect(commonRank({ lv: 4 })).toBeLessThan(commonRank({}));
+    expect(commonRank({ lv: 2, fq: 0 })).toBe(2);
+  });
+
+  it("等級が無ければ字幕での頻度から。よく使っても 고급 と同じ段まで", () => {
+    expect(commonRank({ lv: 4, fq: 300 })).toBe(3);
+    expect(commonRank({ fq: 1.5 })).toBe(4);
+    expect(commonRank({ fq: 0.3 })).toBe(5);
+    // 頻度の分からない語（手で入れた語など）は勧めないほどではない
+    expect(commonRank({})).toBe(4);
+  });
+
+  it("ほとんど使わない語と、人をののしる語は勧めない", () => {
+    expect(isRare({ hangul: "하지", hanja: "夏至", lv: 4, fq: 0 })).toBe(true);
+    expect(isRare({ hangul: "하자", hanja: "瑕疵", lv: 3, fq: 0 })).toBe(false);
+    expect(isRare({ hangul: "병신", hanja: "病身", fq: 27 })).toBe(true);
+    expect(isRare({ hangul: "학생", hanja: "學生" })).toBe(false);
   });
 });

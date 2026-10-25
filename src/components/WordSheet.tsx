@@ -1,7 +1,7 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { useMemo, useState, type FormEvent } from "react";
 import { unlockedBy, wordKey } from "../data/combine";
-import { splitHanja } from "../data/dataset";
+import { glyphOf, splitHanja } from "../data/dataset";
 import { glossText, maskedGlossText } from "../data/gloss";
 import { isSameReading, readingNotes } from "../data/reading";
 import { enrich } from "../data/resolver";
@@ -9,6 +9,7 @@ import { wordOf } from "../data/sentences";
 import type { WordData } from "../data/types";
 import { t } from "../copy";
 import { addWord, db, removeWord, type CollectedWord } from "../db";
+import { usePrefs } from "../prefs";
 import { useChars, useSentences, useWords } from "../util/live";
 import appStyles from "../app.module.css";
 import { Gain } from "./Gain";
@@ -60,6 +61,7 @@ function Body({
   onOpen: (w: Word) => void;
   onClose: () => void;
 }) {
+  const { script } = usePrefs();
   const hanja = word.hanja.normalize("NFC");
   const [typed, setTyped] = useState("");
   const [wrong, setWrong] = useState(false);
@@ -165,7 +167,7 @@ function Body({
         {!masked && notes.length > 0 ? (
           <ul className={styles.notes}>
             {notes.map((n) => (
-              <li key={n.char}>{t.read.variant(n.char, n.usual, n.here)}</li>
+              <li key={n.char}>{t.read.variant(glyphOf(n.char, script), n)}</li>
             ))}
           </ul>
         ) : null}

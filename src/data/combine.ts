@@ -3,7 +3,7 @@
 // 造語の自動生成は行わず、辞書（将来はオンライン辞書キャッシュ）に存在する語のみを対象とする。
 
 import { charMap, charToWords, hangulToWords, hanjaToWords, splitHanja } from "./dataset";
-import { commonRank, enrich } from "./resolver";
+import { commonRank, enrich, isRare } from "./resolver";
 import type { ResolvedWord, WordData } from "./types";
 
 /** 語を一意に表すキー。同音異義語（사기 詐欺 / 사기 士氣）を別の語として扱うため漢字表記も含める。 */
@@ -16,11 +16,11 @@ export interface DiscoverResult extends ResolvedWord {
   alreadyOwned: boolean;
 }
 
-/** 集めた字を1つでも含む語（全件走査を避けるための候補）。 */
+/** 集めた字を1つでも含む語（全件走査を避けるための候補）。ほとんど使わない語は覚えても使わないので、入れない。 */
 function candidatesFor(collectedChars: Iterable<string>): Set<WordData> {
   const candidates = new Set<WordData>();
   for (const ch of collectedChars) {
-    for (const w of charToWords.get(ch) ?? []) candidates.add(w);
+    for (const w of charToWords.get(ch) ?? []) if (!isRare(w)) candidates.add(w);
   }
   return candidates;
 }
@@ -36,11 +36,12 @@ function easeLength(w: WordData): number {
   return n === 1 ? 99 : n;
 }
 
-/** 読みやすい順：1字語は最後 → よく使う語 → 字数の少ない語 → 基礎漢字だけでできた語 → 가나다順。 */
+/** 読みやすい順：1字語は最後 → よく使う語（等級・字幕での頻度） → 字数の少ない語 → 基礎漢字だけでできた語 → 가나다順。 */
 export function byEase(a: WordData, b: WordData): number {
   return (
     Number(easeLength(a) === 99) - Number(easeLength(b) === 99) ||
     commonRank(a) - commonRank(b) ||
+    (b.fq ?? 0) - (a.fq ?? 0) ||
     easeLength(a) - easeLength(b) ||
     Number(allBasic(b)) - Number(allBasic(a)) ||
     a.hangul.localeCompare(b.hangul, "ko")
@@ -112,7 +113,7 @@ export function unlockedBy(
   for (const c of fresh) {
     for (const w of charToWords.get(c) ?? []) {
       const key = wordKey(w);
-      if (key === self || owned.has(key) || out.has(key)) continue;
+      if (key === self || owned.has(key) || out.has(key) || isRare(w)) continue;
       const parts = splitHanja(w.hanja);
       if (parts.length > 1 && parts.every((x) => after.has(x))) out.set(key, w);
     }
@@ -120,18 +121,27 @@ export function unlockedBy(
   return [...out.values()].sort(byEase);
 }
 
-/** 次に出会うと読める語が増える字を、増える語数の多い順に（同数なら基礎漢字を先に）。 */
+/**
+ * 次に出会うと読める語が増える字。よく使う語（한국어기초사전 の 초급〜고급）が多く増える字から、同じなら増える語数、
+ * 基礎漢字の順。まれな語ばかり増える字（的・性・化 の付いた語）より、学ぶ人がよく出会う語の増える字を先に。
+ */
 export function unlockers(near: NearResult[]): { char: string; count: number }[] {
-  const counts = new Map<string, number>();
-  for (const n of near) counts.set(n.missing, (counts.get(n.missing) ?? 0) + 1);
+  const counts = new Map<string, { count: number; common: number }>();
+  for (const n of near) {
+    const c = counts.get(n.missing) ?? { count: 0, common: 0 };
+    c.count++;
+    if (commonRank(n.word) <= 3) c.common++;
+    counts.set(n.missing, c);
+  }
   return [...counts.entries()]
-    .map(([char, count]) => ({ char, count }))
     .sort(
-      (a, b) =>
-        b.count - a.count ||
-        Number(Boolean(charMap.get(b.char)?.edu)) - Number(Boolean(charMap.get(a.char)?.edu)) ||
-        a.char.localeCompare(b.char)
-    );
+      ([a, x], [b, y]) =>
+        y.common - x.common ||
+        y.count - x.count ||
+        Number(Boolean(charMap.get(b)?.edu)) - Number(Boolean(charMap.get(a)?.edu)) ||
+        a.localeCompare(b)
+    )
+    .map(([char, { count }]) => ({ char, count }));
 }
 
 /** 並べた漢字とまったく同じ表記の実在語（読みが複数ある語もあるので全部）。 */

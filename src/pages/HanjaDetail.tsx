@@ -5,7 +5,7 @@ import { charToWords, getCharData } from "../data/dataset";
 import type { WordData } from "../data/types";
 import { t } from "../copy";
 import { useChars, useSentences, useWords } from "../util/live";
-import { sentenceScore, wordOf } from "../data/sentences";
+import { learnerLevel, sentenceScore, wordOf } from "../data/sentences";
 import { usePrefs } from "../prefs";
 import { Icon } from "../components/Icon";
 import { SentenceRows } from "../components/SentenceView";
@@ -255,11 +255,13 @@ function CharSentences({
 }) {
   const data = useSentences();
   const [limit, setLimit] = useState(4);
-  // 集めた語の入った文から（また出会う）。
+  // 集めた語の入った文から（また出会う）。学ぶ人の段階より難しい語の文は後ろに。
   const ids = useMemo(() => {
     if (!data) return [];
     const list = data.byChar.get(char) ?? [];
-    return [...list].sort((a, b) => sentenceScore(data.list[b], collected, owned) - sentenceScore(data.list[a], collected, owned));
+    const level = learnerLevel(owned);
+    const score = (id: number) => sentenceScore(data.list[id], collected, owned, { level });
+    return [...list].sort((a, b) => score(b) - score(a));
   }, [data, char, collected, owned]);
   if (!data || ids.length === 0) return null;
   return (

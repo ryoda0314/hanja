@@ -56,6 +56,14 @@
 - `public/data/sentences.json` は、その文に `scripts/build-sentences.mjs` と `scripts/sentences/decisions.json` で漢字語の印を付けたもの。
   漢字語の判定には上の辞書データ（kengdic・Unihan・kyujitai）を使う。
 
+## 8. FrequencyWords（語をよく使うか）
+
+- 出典: FrequencyWords — Hermit Dave, https://github.com/hermitdave/FrequencyWords
+  （OpenSubtitles 2018 の韓国語字幕から数えた語の頻度。`content/2018/ko/ko_full.txt`）
+- ライセンス: **CC BY-SA 4.0**（内容）
+- 語節の数から語尾・助詞を外して語ごとにまとめ、`words.json` の `fq`（100万語あたりの回数）にしています（派生物）。
+  등급 の無い語のうち、字幕でほとんど使わない語は、読める語・あと1字で読める語として勧めません。
+
 ## 将来利用予定（Phase 2・オンライン解決）
 
 | データ | 用途 | 出典 | 備考 |

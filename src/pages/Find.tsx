@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { discoverWords, nearWords, unlockedBy, unlockers, wordKey } from "../data/combine";
-import { getCharData } from "../data/dataset";
+import { getCharData, glyphOf } from "../data/dataset";
+import { learnerLevel } from "../data/sentences";
 import { dueWords } from "../data/stage";
 import type { WordData } from "../data/types";
 import { t } from "../copy";
+import { usePrefs } from "../prefs";
 import { useChars, useSentences, useWords } from "../util/live";
 import { Icon } from "../components/Icon";
 import { WordRow } from "../components/WordRow";
@@ -39,6 +41,7 @@ export default function Find() {
   const collected = useMemo(() => new Set((chars ?? []).map((c) => c.char)), [chars]);
   const readable = useMemo(() => discoverWords(collected, ownedKeys, true), [collected, ownedKeys]);
   const near = useMemo(() => nearWords(collected, ownedKeys), [collected, ownedKeys]);
+  const level = useMemo(() => learnerLevel(ownedKeys), [ownedKeys]);
   const due = useMemo(() => new Set(dueWords(words ?? [], Date.now()).map(wordKey)), [words]);
 
   const navigate = useNavigate();
@@ -89,7 +92,7 @@ export default function Find() {
                 {sentences ? <p className={app.note}>{t.meet.source}</p> : null}
               </>
             ) : null}
-            {view === "read" ? <TryRead pool={readable} onNear={() => open("near")} /> : null}
+            {view === "read" ? <TryRead pool={readable} level={level} onNear={() => open("near")} /> : null}
             {view === "readable" ? <Readable words={readable} onRead={() => open("read")} onOpen={setSheet} /> : null}
             {view === "near" ? (
               <Near near={near} gain={(w) => unlockedBy(w, collected, ownedKeys).length} onOpen={setSheet} />
@@ -196,6 +199,7 @@ function Near({
   gain: (w: Word) => number;
   onOpen: (w: Word) => void;
 }) {
+  const { script } = usePrefs();
   const [focus, setFocus] = useState<string | null>(null);
   const [limit, setLimit] = useState(PAGE);
   const keys = useMemo(() => unlockers(near).slice(0, 24), [near]);
@@ -213,7 +217,7 @@ function Near({
             key={k.char}
             on={focus === k.char}
             onClick={() => setFocus(focus === k.char ? null : k.char)}
-            label={k.char}
+            label={glyphOf(k.char, script)}
             count={t.find.unlockCount(k.count)}
             hanja
           />
@@ -221,7 +225,7 @@ function Near({
       </div>
       {focus ? (
         <Link to={`/hanja/${encodeURIComponent(focus)}`} className={app.quietAction}>
-          <span className="hanja">{focus}</span>
+          <span className="hanja">{glyphOf(focus, script)}</span>
           <span className="t-ko">{getCharData(focus)?.readings[0]?.eum}</span>
           <Icon name="arrow" size={16} />
         </Link>

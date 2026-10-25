@@ -101,15 +101,22 @@ describe("nearWords / unlockers", () => {
     expect(near.map((n) => n.word.hanja)).not.toContain("學校");
   });
 
-  it("unlockers は増える語数の多い字から並ぶ", () => {
+  it("unlockers は、よく使う語（초급〜고급）の増える字を先に", () => {
+    const w = (hanja: string, lv?: number) => ({ word: { hangul: "가", hanja, gloss: "", lv }, missing: hanja[1] });
+    // 的 はまれな語が3語、館 は 초급 の語が2語
+    const near = [w("美的"), w("知的"), w("動的"), w("會館", 1), w("本館", 2)];
+    expect(unlockers(near).map((u) => [u.char, u.count])).toEqual([
+      ["館", 2],
+      ["的", 3],
+    ]);
+  });
+
+  it("unlockers は、字ごとに増える語の数を数える", () => {
     const near = nearWords(new Set(["學", "生"]), new Set());
     const list = unlockers(near);
     // 大 は 大學 と 大學生 の2語を読めるようにする
     const big = list.find((u) => u.char === "大");
     expect(big?.count).toBe(2);
-    for (let i = 1; i < list.length; i++) {
-      expect(list[i - 1].count).toBeGreaterThanOrEqual(list[i].count);
-    }
   });
 });
 

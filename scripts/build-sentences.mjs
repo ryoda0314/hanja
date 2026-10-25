@@ -1,12 +1,14 @@
 // 文で出会う の例文データを作る
 // =====================================================================
-// 姉妹アプリ ことのあめ の例文（韓国語＋日本語訳）から漢字語が入った文を選び、どこにどの漢字語があるかの印を付けて
-// public/data/sentences.json に書き出す。
+// 姉妹アプリ ことのあめ の例文（韓国語＋日本語訳）と、ことのね のために書いた文から漢字語が入った文を選び、
+// どこにどの漢字語があるかの印を付けて public/data/sentences.json に書き出す。
 //
-//   入力（どちらか）:
+//   入力（ことのあめ の文はどちらか）:
 //     - scripts/.cache/sentences.json … scripts/export-sentences.mjs で書き出した、ことのあめ の査読済みの文（音声あり）
 //     - --kotonoame <dir>              … ことのあめ のリポジトリ。scripts/seed-data.json と scripts/library/work/*.done.json
 //                                        （AI の下書き。捨てた下書き drop は除く。査読前の文も含む）
+//     - scripts/sentences/kotonone.json … ことのね のために書いた文 {ko, ja, words: {ハングル: 漢字}}。ことのあめ の文に
+//                                        出てこない基礎の語（일본・건강・감사 …）のため。words は書いたときに狙った語の漢字表記
 //   照らし合わせ:
 //     - public/data/words.json / hanja-chars.json（build-data.mjs の出力）
 //     - scripts/sentences/decisions.json … 日本語訳で裏の取れない語を、人が確かめて決めたもの
@@ -14,24 +16,21 @@
 //     - public/data/sentences.json   {source, audioBase, sentences: [{ko, ja, w: [[start, end, 漢字], …]}]}
 //     - scripts/sentences/review.json … まだ決めていない語（出てくる数の多い順、例文つき）。決めたら decisions.json へ。
 //
-// 印の付け方:
-//   1. 語節（ハングルの続き）の頭から、辞書にある2音節以上の語のうち最も長いものを探す（助詞・語尾は後ろに付く）。
-//      残りの頭にも2音節以上の語があれば続けて探す（여자친구 → 여자・친구）。
-//   2. 固有語の取り違え（고양이 の 고양、여기、일어나다 の 일어 …）は decisions.json の skip で先に外す。
-//   3. 日本語訳に字が出てくる候補があれば、出てくる字の多い語を選ぶ（수업 → 授業、내일 → 來日 の 日）。
-//   4. 訳に字が出てこない語（친구 親舊＝友達 など）は decisions.json の決定に従う。決まっていなければ印を付けず review.json へ。
+// 印の付け方は scripts/sentences/mark.mjs。ことのね のために書いた文は、書き足す前に scripts/sentences/check.mjs で確かめる。
 //
 // 実行: node scripts/build-sentences.mjs [--kotonoame <dir>]
 
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createMarker } from "./sentences/mark.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 const DATA = path.join(ROOT, "public", "data");
 const DECISIONS = path.join(__dirname, "sentences", "decisions.json");
 const REVIEW = path.join(__dirname, "sentences", "review.json");
+const OWN = path.join(__dirname, "sentences", "kotonone.json");
 const EXPORTED = path.join(__dirname, ".cache", "sentences.json");
 
 const readJson = (p) => JSON.parse(fs.readFileSync(p, "utf8"));
@@ -63,93 +62,35 @@ if (arg !== -1) {
   );
   process.exit(1);
 }
-// 同じ文は一つに（下書きと手書きで重なることがある）。
+const own = fs.existsSync(OWN) ? readJson(OWN).sentences : [];
+// 同じ文は一つに（下書きと手書きで重なることがある。ことのあめ の文を先に）。
 const seen = new Set();
-const sentences = input.list
-  .map((s) => ({ ko: String(s.ko ?? "").trim(), ja: String(s.ja ?? "").trim() }))
+const sentences = [...input.list, ...own]
+  .map((s) => ({ ko: String(s.ko ?? "").trim(), ja: String(s.ja ?? "").trim(), words: s.words }))
   .filter((s) => s.ko && s.ja && !seen.has(s.ko) && seen.add(s.ko));
-console.log(`文: ${sentences.length}（${input.source}）`);
+console.log(`文: ${sentences.length}（${input.source} ${input.list.length}・ことのね ${own.length}）`);
 
-// --- 2) 辞書 -----------------------------------------------------------------
+// --- 2) 印を付ける -----------------------------------------------------------
 const decisions = fs.existsSync(DECISIONS) ? readJson(DECISIONS) : { words: {}, skip: {}, exclude: [] };
-const decided = decisions.words ?? {};
-const skipExact = new Set(decisions.skip?.exact ?? []);
-const skipPrefix = decisions.skip?.prefix ?? [];
-// 例文では選ばない漢字表記。除いた結果、候補の無くなった読みは辞書に無いものとして、より短い語を探す（거절당 → 거절）。
-const excluded = new Set(decisions.exclude ?? []);
-
-const words = readJson(path.join(DATA, "words.json"));
-const chars = readJson(path.join(DATA, "hanja-chars.json"));
-const jpOf = new Map(chars.map((c) => [c.char, c.jp ?? c.char]));
-const byHangul = new Map();
-for (const w of words) {
-  if (Array.from(w.hangul).length < 2 || excluded.has(w.hanja)) continue;
-  if (!byHangul.has(w.hangul)) byHangul.set(w.hangul, []);
-  byHangul.get(w.hangul).push(w);
-}
-const maxLen = Math.max(...[...byHangul.keys()].map((k) => k.length));
-
-// --- 3) 印を付ける -----------------------------------------------------------
-/** 語節の頭から、辞書にある最も長い語（2音節以上）。 */
-function headWord(text) {
-  for (let len = Math.min(maxLen, text.length); len >= 2; len--) {
-    const head = text.slice(0, len);
-    if (byHangul.has(head)) return head;
-  }
-  return null;
-}
-
-/** 日本語訳に、候補の日本の字がいくつ出てくるか。 */
-function overlap(hanja, ja) {
-  return Array.from(hanja).filter((c) => ja.includes(jpOf.get(c) ?? c)).length;
-}
+const marker = createMarker({
+  words: readJson(path.join(DATA, "words.json")),
+  chars: readJson(path.join(DATA, "hanja-chars.json")),
+  decisions,
+});
 
 const pending = new Map(); // まだ決めていない語 hangul -> {count, examples}
-const stats = { marked: 0, byJa: 0, byDecision: 0, skipped: 0, pending: 0 };
-
-function choose(hangul, ja) {
-  const cands = byHangul.get(hangul);
-  const scored = cands
-    .map((w) => ({ w, hit: overlap(w.hanja, ja) }))
-    .sort((a, b) => b.hit - a.hit || a.w.hanja.localeCompare(b.w.hanja));
-  if (scored[0].hit > 0) {
-    stats.byJa++;
-    return scored[0].w.hanja;
-  }
-  if (hangul in decided) {
-    const d = decided[hangul];
-    if (d === null) {
-      stats.skipped++;
-      return null;
-    }
-    if (!cands.some((w) => w.hanja === d)) throw new Error(`decisions.json: ${hangul} の ${d} は辞書にありません`);
-    stats.byDecision++;
-    return d;
-  }
-  stats.pending++;
-  return undefined;
-}
-
+const stats = { marked: 0, own: 0, ja: 0, decision: 0, skipped: 0, pending: 0 };
 const out = [];
 for (const s of sentences) {
-  const marks = [];
-  for (const m of s.ko.matchAll(/[가-힣]+/g)) {
-    const run = m[0];
-    if (skipExact.has(run) || skipPrefix.some((p) => run.startsWith(p))) continue;
-    let at = 0;
-    while (at < run.length - 1) {
-      const hangul = headWord(run.slice(at));
-      if (!hangul) break;
-      const hanja = choose(hangul, s.ja);
-      if (hanja) marks.push([m.index + at, m.index + at + hangul.length, hanja]);
-      else if (hanja === undefined) {
-        const p = pending.get(hangul) ?? { count: 0, examples: [] };
-        p.count++;
-        if (p.examples.length < 3) p.examples.push(`${s.ko}｜${s.ja}`);
-        pending.set(hangul, p);
-      }
-      at += hangul.length;
-    }
+  const { marks, found } = marker.mark(s);
+  for (const f of found) {
+    if (f.hanja === null) stats.skipped++;
+    else stats[f.by]++;
+    if (f.by !== "pending") continue;
+    const p = pending.get(f.hangul) ?? { count: 0, examples: [] };
+    p.count++;
+    if (p.examples.length < 3) p.examples.push(`${s.ko}｜${s.ja}`);
+    pending.set(f.hangul, p);
   }
   if (marks.length) {
     stats.marked += marks.length;
@@ -157,16 +98,16 @@ for (const s of sentences) {
   }
 }
 
-// --- 4) 出力 -----------------------------------------------------------------
+// --- 3) 出力 -----------------------------------------------------------------
 fs.writeFileSync(
   path.join(DATA, "sentences.json"),
-  JSON.stringify({ source: input.source, audioBase: input.audioBase, sentences: out })
+  JSON.stringify({ source: own.length ? `${input.source}+kotonone` : input.source, audioBase: input.audioBase, sentences: out })
 );
 const review = [...pending.entries()]
   .sort((a, b) => b[1].count - a[1].count)
   .map(([hangul, p]) => ({
     hangul,
-    candidates: byHangul.get(hangul).map((w) => `${w.hanja} ${w.gloss}`),
+    candidates: marker.byHangul.get(hangul).map((w) => `${w.hanja} ${w.gloss}`),
     count: p.count,
     examples: p.examples,
   }));
@@ -174,6 +115,8 @@ fs.mkdirSync(path.dirname(REVIEW), { recursive: true });
 fs.writeFileSync(REVIEW, JSON.stringify(review, null, 1) + "\n");
 
 const size = fs.statSync(path.join(DATA, "sentences.json")).size;
-console.log(`印の付いた文: ${out.length} 文・${stats.marked} 語（日本語訳で ${stats.byJa}・決定で ${stats.byDecision}）`);
+console.log(
+  `印の付いた文: ${out.length} 文・${stats.marked} 語（書いた文の表記で ${stats.own}・日本語訳で ${stats.ja}・決定で ${stats.decision}）`
+);
 console.log(`外した語: ${stats.skipped}・まだ決めていない語: ${review.length} 種類（${stats.pending} か所）→ scripts/sentences/review.json`);
 console.log(`public/data/sentences.json ${(size / 1024).toFixed(0)}KB`);

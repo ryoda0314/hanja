@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { findWordsByHanja, wordKey } from "../data/combine";
-import { getCharData } from "../data/dataset";
+import { getCharData, glyphOf } from "../data/dataset";
 import type { WordData } from "../data/types";
 import { t } from "../copy";
+import { usePrefs } from "../prefs";
 import { WordRow } from "../components/WordRow";
 import app from "../app.module.css";
 import styles from "./Build.module.css";
@@ -11,6 +12,7 @@ type Word = Pick<WordData, "hangul" | "hanja" | "gloss">;
 
 /** 集めた字を押して並べ、その並びの語が辞書にあるかを見る。 */
 export function Build({ chars, ownedKeys, onOpen }: { chars: string[]; ownedKeys: Set<string>; onOpen: (w: Word) => void }) {
+  const { script } = usePrefs();
   const [sequence, setSequence] = useState<string[]>([]);
   const [filter, setFilter] = useState("");
   const q = filter.trim();
@@ -28,7 +30,7 @@ export function Build({ chars, ownedKeys, onOpen }: { chars: string[]; ownedKeys
       <div className={styles.board}>
         <div className={styles.sequence} aria-live="polite">
           {sequence.length ? (
-            <span className={`hanja ${styles.sequenceText}`}>{sequence.join("")}</span>
+            <span className={`hanja ${styles.sequenceText}`}>{sequence.map((c) => glyphOf(c, script)).join("")}</span>
           ) : (
             <span className={styles.sequenceEmpty}>{t.find.buildEmpty}</span>
           )}
@@ -77,7 +79,7 @@ export function Build({ chars, ownedKeys, onOpen }: { chars: string[]; ownedKeys
         {tray.map((c) => (
           <li key={c}>
             <button type="button" className={styles.trayChar} onClick={() => setSequence((s) => [...s, c].slice(0, 8))}>
-              <span className="hanja">{c}</span>
+              <span className="hanja">{glyphOf(c, script)}</span>
               <span className={`${styles.trayRead} t-ko`}>{getCharData(c)?.readings[0]?.eum}</span>
             </button>
           </li>

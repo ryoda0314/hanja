@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { wordKey } from "../data/combine";
-import { charMap, eduChars } from "../data/dataset";
+import { charMap, eduChars, glyphOf } from "../data/dataset";
 import type { HanjaCharData, WordData } from "../data/types";
 import { t } from "../copy";
 import type { CollectedChar } from "../db";
+import { usePrefs } from "../prefs";
 import { useChars, useWords } from "../util/live";
 import { CharCard, CharCell } from "../components/CharCard";
 import { Icon } from "../components/Icon";
@@ -134,6 +135,7 @@ export default function Hanja() {
 
 /** 集めた字：最近また出会った字、並べ替え、カード。 */
 function Mine({ chars, sort, onSort }: { chars: CollectedChar[]; sort: Sort; onSort: (s: Sort) => void }) {
+  const { script } = usePrefs();
   const now = Date.now();
   const again = chars
     .filter((c) => c.count >= 2 && c.lastAddedAt > c.firstAddedAt && now - c.lastAddedAt < WEEK)
@@ -155,7 +157,7 @@ function Mine({ chars, sort, onSort }: { chars: CollectedChar[]; sort: Sort; onS
             {again.map((c) => (
               <li key={c.char}>
                 <Link to={`/hanja/${encodeURIComponent(c.char)}`} className={hs.againCard}>
-                  <span className={`hanja ${hs.againGlyph}`}>{c.char}</span>
+                  <span className={`hanja ${hs.againGlyph}`}>{glyphOf(c.char, script)}</span>
                   <span className={hs.againWhen}>
                     {t.common.ago(c.lastAddedAt)}・{t.hanja.depth(c.count)}
                   </span>

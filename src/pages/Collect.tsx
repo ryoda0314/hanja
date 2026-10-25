@@ -1,13 +1,14 @@
 import { useMemo, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { discoverWords, unlockedBy, wordKey } from "../data/combine";
-import { splitHanja } from "../data/dataset";
+import { glyphOf, splitHanja } from "../data/dataset";
 import { dueWords } from "../data/stage";
 import { glossText } from "../data/gloss";
 import { guessHanja, isHanjaInput, resolveByHanja, resolveLocalAll, resolveManual, resolveStem } from "../data/resolver";
 import type { ResolvedWord, WordData } from "../data/types";
 import { t } from "../copy";
 import { addWord, db, type CollectedWord } from "../db";
+import { usePrefs } from "../prefs";
 import { useChars, useWords } from "../util/live";
 import { Gain } from "../components/Gain";
 import { InstallHint } from "../components/InstallHint";
@@ -403,6 +404,7 @@ function Collected({
   onOpen: (w: Pick<WordData, "hangul" | "hanja" | "gloss">) => void;
   onNext: () => void;
 }) {
+  const { script } = usePrefs();
   const self = wordKey(word);
   const links = word.chars
     .map((c, i) => ({ char: c, again: before[i] > 0, words: words.filter((w) => w.chars.includes(c) && wordKey(w) !== self) }))
@@ -438,7 +440,7 @@ function Collected({
         <ul className={styles.links}>
           {links.map((l) => (
             <li key={l.char}>
-              <span className={`hanja ${styles.linkChar}`}>{l.char}</span>
+              <span className={`hanja ${styles.linkChar}`}>{glyphOf(l.char, script)}</span>
               <span>
                 {l.words.slice(0, 3).map((w, i) => (
                   <span key={w.id}>

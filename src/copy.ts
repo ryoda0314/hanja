@@ -1,6 +1,8 @@
 // 画面の文言。学ぶ人の側から、平易に（姉妹アプリ ことのあめ の src/lib/i18n/ja.ts と同じ書き方）。
 // 名前を変えるときは app と、index.html・vite.config.ts の manifest をそろえる。
 
+import type { ReadingNote } from "./data/reading";
+
 const day = (at: number) => {
   const d = new Date(at);
   return `${d.getMonth() + 1}月${d.getDate()}日`;
@@ -132,7 +134,7 @@ export const t = {
     next: "次の雨",
     loading: "文を読み込んでいます",
     failed: "文を読み込めませんでした。つながったところで、もう一度開いてください。",
-    source: "文は、姉妹アプリ ことのあめ の例文から。",
+    source: "文は、姉妹アプリ ことのあめ の例文と、ことのね のために書いた文から。",
   },
   // 集めた語の覚え具合（ことのあめ の メモの段階 と同じ考え方）。
   stage: {
@@ -202,10 +204,23 @@ export const t = {
     skip: "ほかの語",
     read: "読めました。習っていない語なのに。",
     missed: "答えはこちら。違ったところに印を付けました。",
+    // 字のふだんの音をつなげたとおりに読んだのに、この語では読みが変わる字があったとき（來日 を 래일 と読んだ）。
+    missedVariant: "字の音どおりに読めています。この語では、読みが変わる字があります。",
     shown: "答え",
     retype: "打ってあつめる",
     retypeSubmit: "あつめる",
-    variant: (char: string, usual: string, here: string) => `${char} はふだん ${usual}、この語では ${here}`,
+    // 字を押したとき、この語での音がふだんの音と違えば、ふだんの音を小さく添える（내일 の 來 は 내、ふだん 래）。
+    usualSound: (eum: string) => `ふだん ${eum}`,
+    // 字のふだんの音と、この語での音が違うわけ（data/reading.ts の VariantRule）。
+    variant: (char: string, { usual, here, rule }: ReadingNote) =>
+      ({
+        initial: `${char} はふだん ${usual}。語のはじめでは ${here} と読みます（頭音法則）`,
+        inside: `${char} はふだん ${usual}。この語では、語のはじめと同じ ${here} と読みます`,
+        afterVowel: `${char} はふだん ${usual}。母音や ㄴ のあとでは ${here} と読みます`,
+        beforeDJ: `${char} はふだん ${usual}。ㄷ・ㅈ の前では ${here} と読みます`,
+        saisiot: `${char} はふだん ${usual}。この語では ㅅ を書き足して ${here} と書きます（사이시옷）`,
+        other: `${char} はふだん ${usual}、この語では ${here}。語によって読みが変わる字です`,
+      })[rule],
     collected: "あつめた語に入れました。",
     undo: "外す",
     undone: "外しました。",
@@ -238,7 +253,7 @@ export const t = {
     title: "漢字",
     views: { mine: "集めた字", edu: "基礎漢字1800", build: "組み立てる" },
     viewsLabel: "見方",
-    search: "漢字・音・読みで探す（學 / 학 / ガク）",
+    search: "漢字・音・読みで探す（学 / 학 / ガク）",
     sorts: { count: "よく出会う順", recent: "新しい順", strokes: "画数順" },
     sortLabel: "並べ方",
     empty: "まだ字を集めていません。語をあつめると、その字がここに並びます。",
@@ -281,7 +296,7 @@ export const t = {
     display: "表示",
     script: "漢字の字形",
     scripts: { ko: "韓国の字", ja: "日本の字", both: "両方" },
-    scriptNote: "韓国では旧字体（學・會）を使います。両方にすると、日本の字形が違う語だけ横に添えます。",
+    scriptNote: "韓国では旧字体（學・會）を使います。韓国の字にすると韓国で書く形で、両方にすると字形が違う語だけ日本の字を横に添えます。",
     accent: "アクセントの色",
     accentNames: { wakaba: "わかば", rain: "あめ", ink: "すみ", hydrangea: "あじさい", dusk: "ゆうやけ" },
     rate: "読み上げの速さ",
