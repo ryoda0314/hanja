@@ -21,7 +21,8 @@ const SWATCH: Record<AccentPref, string> = {
   dusk: "#b9462a",
 };
 
-const SISTER_URL = "https://polylinga.app";
+// ことのあめ の公開先。polylinga.app は前のアプリ（PolyLinga）なので使わない。
+const SISTER_URL = "https://polylinga.vercel.app";
 
 const CREDITS = [
   { name: "한국어기초사전", by: "国立国語院", license: "CC BY-SA 2.0 KR", url: "https://krdict.korean.go.kr" },
