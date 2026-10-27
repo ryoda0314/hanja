@@ -144,14 +144,18 @@ node scripts/build-sentences.mjs --kotonoame <ことのあめ のリポジトリ
 ## 使われ方の数（管理者）
 
 何人が使っているかだけを、姉妹アプリ ことのあめ の Supabase に数える（`src/util/usage.ts`）。送るのは、端末ごとの番号
-（その端末で作った乱数）と、日ごとの 開いた・あつめた・読めた の回数と、ホーム画面から開いたかだけ。集めた語は送らない。
+（その端末で作った乱数）と、1時間ごとの 開いた・あつめた・読めた の回数と、ホーム画面から開いたかだけ。集めた語は送らない。
 自分 の「使われ方の数を送る」で止められる。送り先は `.env` の `VITE_SUPABASE_URL`・`VITE_SUPABASE_ANON_KEY`
-（ことのあめ と同じ、公開してよい値。空なら送らない）。
+（ことのあめ と同じ、公開してよい値。空なら送らない）。数えるのは公開先（`.env` の `VITE_SITE_URL`）で開いたときだけで、
+`npm run dev`・preview や Vercel の試しの公開は数えない（公開先を変えたら `VITE_SITE_URL` も変える）。
 
-- 表と関数は `supabase/usage.sql`（名前は `kn_` で始める。ことのあめ は `pl_`、旧アプリの表には触れない）。
-  当てるのは ことのあめ のリポジトリで：`node --env-file=.env.local scripts/migrate.mjs ../作成したもの/hanjaatume/supabase/usage.sql`
-- 見る：`node --env-file=../../polylinga/.env.local scripts/usage.mjs [日数]`（service role で読む）か、Supabase の画面の `kn_stats`。
-- 人数は端末の数。iPhone は Safari とホーム画面のアプリで記録が別なので、追加した人は2台に数えることがある。
+- 表と関数とまとめは `supabase/usage.sql`（名前は `kn_` で始める。ことのあめ は `pl_`、旧アプリの表には触れない）。
+  当てるのは ことのあめ のリポジトリで（何度当ててもよい）：`node --env-file=.env.local scripts/migrate.mjs ../作成したもの/hanjaatume/supabase/usage.sql`
+  2026-10-26 からは日ごと（`kn_days`）にだけ数えていたので、1時間ごとの数は今の版を当てた時刻から先の分だけ。
+- 見る：`node --env-file=../../polylinga/.env.local scripts/usage.mjs [日数]`（日ごと）、`… usage.mjs --hours [日付]`（1時間ごと）。
+  読むのは Supabase の中でまとめた数（`kn_summary`・`kn_stats`・`kn_hourly`）だけ。Supabase の画面でも同じ名前で見られる。
+- 人数は端末の数で、人の数より多めに出る。iPhone は X の中のブラウザ・Safari・ホーム画面のアプリで記録が別なので、
+  X から来てホーム画面に追加した人は3台に数えることがある。同じわけで「はじめて」には、別の入口から戻ってきた人も混じる。
 
 ## アイコン
 

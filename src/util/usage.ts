@@ -1,12 +1,14 @@
 // 使われ方の数（何人が使っているか）。端末ごとの番号（この端末で作った乱数。人とは結びつかない）と、開いた・あつめた・
 // 読めた の回数と、ホーム画面から開いたかだけを、姉妹アプリ ことのあめ の Supabase（kn_ping、supabase/usage.sql）に送る。
 // 集めた語・文は送らない。自分 で止められる。送れなくても（オフライン・送り先が無い）何も起きない。
+// 数えるのは公開先（.env の VITE_SITE_URL）で開いたときだけ。手元の npm run dev・preview や、Vercel の試しの公開は数えない。
 import { isStandalone } from "./install";
 
 export type UsageKind = "open" | "collect" | "read";
 
 const URL_ = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+const SITE = import.meta.env.VITE_SITE_URL as string | undefined;
 const DEVICE = "hanjaatume.device";
 /** 自分 の「使われ方の数を送る」（util/local の usePref と同じ形：1 か 0）。 */
 export const SEND_PREF = "sendUsage";
@@ -32,9 +34,18 @@ function allowed(): boolean {
   }
 }
 
+function onPublicSite(): boolean {
+  if (!import.meta.env.PROD || !SITE) return false;
+  try {
+    return location.origin === new URL(SITE).origin;
+  } catch {
+    return false;
+  }
+}
+
 /** 一つ数える（待たない）。 */
 export function countUsage(kind: UsageKind): void {
-  if (!URL_ || !KEY || import.meta.env.MODE === "test" || !allowed()) return;
+  if (!URL_ || !KEY || !onPublicSite() || !allowed()) return;
   const device = deviceId();
   if (!device) return;
   void fetch(`${URL_}/rest/v1/rpc/kn_ping`, {
