@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { discoverWords, unlockedBy, wordKey } from "../data/combine";
 import { glyphOf, splitHanja } from "../data/dataset";
@@ -10,6 +10,7 @@ import { t } from "../copy";
 import { addWord, db, type CollectedWord } from "../db";
 import { usePrefs } from "../prefs";
 import { useChars, useWords } from "../util/live";
+import { readFallsTotal } from "../util/falls";
 import { isIOS, isStandalone } from "../util/install";
 import { CarryInto } from "../components/Carry";
 import { EveryoneHint } from "../components/EveryoneHint";
@@ -218,34 +219,33 @@ export default function Collect() {
 
           {words === undefined ? null : hasWords ? (
             <>
-              {readable.length > 0 || due > 0 ? (
-                <div className={styles.cards}>
-                  {readable.length > 0 ? (
-                    <Link to="/find?view=read" className={styles.readable}>
-                      <span className={styles.readableText}>
-                        <span className={styles.readableTitle}>{t.collect.readable(readable.length)}</span>
-                        <span className={app.note}>{t.collect.readableNote}</span>
-                      </span>
-                      <span className={styles.readableAction}>
-                        {t.collect.readableAction}
-                        <Icon name="arrow" size={18} />
-                      </span>
-                    </Link>
-                  ) : null}
-                  {due > 0 ? (
-                    <Link to="/words?view=review" className={styles.readable}>
-                      <span className={styles.readableText}>
-                        <span className={styles.readableTitle}>{t.review.panel(due)}</span>
-                        <span className={app.note}>{t.review.homeNote}</span>
-                      </span>
-                      <span className={styles.readableAction}>
-                        {t.review.start}
-                        <Icon name="arrow" size={18} />
-                      </span>
-                    </Link>
-                  ) : null}
-                </div>
-              ) : null}
+              <div className={styles.cards}>
+                {readable.length > 0 ? (
+                  <Link to="/find?view=read" className={styles.readable}>
+                    <span className={styles.readableText}>
+                      <span className={styles.readableTitle}>{t.collect.readable(readable.length)}</span>
+                      <span className={app.note}>{t.collect.readableNote}</span>
+                    </span>
+                    <span className={styles.readableAction}>
+                      {t.collect.readableAction}
+                      <Icon name="arrow" size={18} />
+                    </span>
+                  </Link>
+                ) : null}
+                {due > 0 ? (
+                  <Link to="/words?view=review" className={styles.readable}>
+                    <span className={styles.readableText}>
+                      <span className={styles.readableTitle}>{t.review.panel(due)}</span>
+                      <span className={app.note}>{t.review.homeNote}</span>
+                    </span>
+                    <span className={styles.readableAction}>
+                      {t.review.start}
+                      <Icon name="arrow" size={18} />
+                    </span>
+                  </Link>
+                ) : null}
+                <EveryonePanel />
+              </div>
               <EveryoneHint />
               {(words?.length ?? 0) >= 3 ? <InstallHint /> : null}
               <section>
@@ -282,6 +282,33 @@ export default function Collect() {
 
       {sheet ? <WordSheet key={wordKey(sheet)} word={sheet} onClose={() => setSheet(null)} /> : null}
     </>
+  );
+}
+
+/** みんなの雨への入口。この1時間にみんなが集めた語の数を添える（読めなければ数なしで）。 */
+function EveryonePanel() {
+  const [total, setTotal] = useState<number | null>(null);
+  useEffect(() => {
+    let active = true;
+    void readFallsTotal().then((n) => {
+      if (active) setTotal(n);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return (
+    <Link to="/find?view=everyone" className={styles.readable}>
+      <span className={styles.readableText}>
+        <span className={styles.readableTitle}>{total ? t.everyone.panel(total) : t.find.views.everyone}</span>
+        <span className={app.note}>{t.everyone.panelNote}</span>
+      </span>
+      <span className={styles.readableAction}>
+        {t.everyone.panelAction}
+        <Icon name="arrow" size={18} />
+      </span>
+    </Link>
   );
 }
 

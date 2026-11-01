@@ -64,3 +64,8 @@ export async function readFalls(after = 0): Promise<{ falls: Fall[]; total: numb
     return null;
   }
 }
+
+/** この1時間に降った数だけ（あつめる の入口に添える）。after をいちばん大きくすると、語は返らず数だけ返る。 */
+export async function readFallsTotal(): Promise<number | null> {
+  return (await readFalls(Number.MAX_SAFE_INTEGER))?.total ?? null;
+}

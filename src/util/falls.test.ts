@@ -94,3 +94,18 @@ describe("readFalls", () => {
     expect(await readFalls()).toBeNull();
   });
 });
+
+describe("readFallsTotal", () => {
+  it("語は読まずに、この1時間に降った数だけ", async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(Response.json({ total: 12, falls: [] })));
+    const { readFallsTotal } = await load();
+    expect(await readFallsTotal()).toBe(12);
+    expect(body()).toEqual({ p_ver: "v-test", p_after: Number.MAX_SAFE_INTEGER });
+  });
+
+  it("読めなければ null", async () => {
+    fetchMock.mockImplementation(() => Promise.reject(new Error("offline")));
+    const { readFallsTotal } = await load();
+    expect(await readFallsTotal()).toBeNull();
+  });
+});
