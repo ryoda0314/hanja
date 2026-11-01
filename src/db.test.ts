@@ -70,3 +70,12 @@ describe("staleGlosses", () => {
     expect(staleGlosses(words, (w) => dict.get(`${w.hangul}|${w.hanja}`))).toEqual([{ id: 1, gloss: "がくせい【学生】" }]);
   });
 });
+
+describe("versionOf", () => {
+  it("同じ中身なら同じ名前、1字でも違えば別の名前（みんなの雨の辞書の版）", async () => {
+    const { versionOf } = await import("./data/dataset");
+    expect(versionOf('[{"hangul":"학생"}]')).toBe(versionOf('[{"hangul":"학생"}]'));
+    expect(versionOf('[{"hangul":"학생"}]')).not.toBe(versionOf('[{"hangul":"학샘"}]'));
+    expect(versionOf("x".repeat(3_000_000)).length).toBeLessThanOrEqual(16);
+  });
+});

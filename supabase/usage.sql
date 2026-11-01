@@ -4,14 +4,15 @@
 -- 送られるのは、端末ごとの番号（その端末で作った乱数。人とは結びつかない）と、1時間ごとの回数（開いた・あつめた・読めた）と、
 -- ホーム画面から開いたかどうかだけ。集めた語・文・名前・メールは送らない。
 -- 表は外から読めず書けず、kn_ping だけがその時間の行を足して数える。
--- まとめは Supabase の中で数える（kn_summary：これまで・きょう・7日・30日の端末の数、kn_stats：日ごと、kn_hourly：時間ごと）。
+-- まとめは Supabase の中で数える（kn_summary：これまで・きょう・7日・30日の端末の数、kn_stats：日ごと、kn_hourly：時間ごと、
+-- kn_cohorts：初めて来た日ごとに、その後の日にまた来た端末の数）。
 -- 見るのは Supabase の画面か、ことのね の scripts/usage.mjs（service role で、このまとめだけを読む）。
 --
 -- 当て方（ことのあめ のリポジトリで。何度当ててもよい）：
---   node --env-file=.env.local scripts/migrate.mjs ../作成したもの/hanjaatume/supabase/usage.sql
+--   node --env-file=.env.local scripts/migrate.mjs ../hanjaatume/supabase/usage.sql
 -- 2026-10-26 に当てた最初の版（日ごとの kn_days に数える）を、この版で1時間ごと（kn_hours）に切り替える。kn_days の数は
 -- そのまま残り、日ごとのまとめに足される。切り替える前の時間ごとの数は無い（日ごとにしか数えていなかった）。
--- 外すとき：drop view public.kn_summary, public.kn_stats, public.kn_hourly; drop function public.kn_ping(uuid, text, boolean);
+-- 外すとき：drop view public.kn_cohorts, public.kn_summary, public.kn_stats, public.kn_hourly; drop function public.kn_ping(uuid, text, boolean);
 --           drop table public.kn_hours, public.kn_days;
 
 -- 最初の版の、日ごとの数（2026-10-26 から、この版を当てるまで）。
@@ -82,6 +83,7 @@ revoke all on function public.kn_ping(uuid, text, boolean) from public;
 grant execute on function public.kn_ping(uuid, text, boolean) to anon, authenticated;
 
 -- まとめ。最初の版のまとめ（kn_stats）とは列の型が違うので、消して作り直す（見え方の定義だけで、数は表に残る）。
+drop view if exists public.kn_cohorts;
 drop view if exists public.kn_summary;
 drop view if exists public.kn_stats;
 drop view if exists public.kn_hourly;
@@ -145,6 +147,35 @@ select
 from u
 cross join t;
 
+-- 初めて来た日ごとに、次の日・2日後・3日後・7日後と、その後のいずれかの日にまた来た端末の数（戻ってきたか）。
+-- 日の区切りは朝4時：夜に来て日付をまたいで使い続けた人を、「次の日に戻ってきた」と数えないため。そのため、初めて来た日の
+-- 端末の数は、0時で区切る日ごとのまとめ（kn_stats）の「はじめて」と少し違う。1時間ごとに数えはじめる前（kn_days）の分は、
+-- 0時で区切った日のまま。その日がまだ来ていなければ null（きょうの分は途中の数）。
+create view public.kn_cohorts with (security_invoker = true) as
+with active as (
+  select device, (hour - interval '4 hours')::date as day from public.kn_hours
+  union
+  select device, day from public.kn_days
+), firsts as (
+  select device, min(day) as first_day from active group by device
+), t as (
+  select ((now() at time zone 'Asia/Tokyo') - interval '4 hours')::date as today
+)
+select
+  f.first_day,
+  count(distinct f.device) as devices,
+  case when f.first_day + 1 <= t.today then count(distinct a.device) filter (where a.day = f.first_day + 1) end as back_1,
+  case when f.first_day + 2 <= t.today then count(distinct a.device) filter (where a.day = f.first_day + 2) end as back_2,
+  case when f.first_day + 3 <= t.today then count(distinct a.device) filter (where a.day = f.first_day + 3) end as back_3,
+  case when f.first_day + 7 <= t.today then count(distinct a.device) filter (where a.day = f.first_day + 7) end as back_7,
+  count(distinct a.device) as back_any
+from firsts f
+left join active a on a.device = f.device and a.day > f.first_day
+cross join t
+group by f.first_day, t.today
+order by f.first_day desc;
+
+revoke all on public.kn_cohorts from public, anon, authenticated;
 revoke all on public.kn_hourly from public, anon, authenticated;
 revoke all on public.kn_stats from public, anon, authenticated;
 revoke all on public.kn_summary from public, anon, authenticated;

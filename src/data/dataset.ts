@@ -35,6 +35,8 @@ export const hanjaToWords: Map<string, WordData[]> = new Map();
 export const jpToKo: Map<string, string[]> = new Map();
 /** 全語リスト（参照用）。中身は rebuildIndexes で入れ替える。 */
 export const seedWords: WordData[] = [];
+/** 語（ハングル|漢字）から、全語リストの中の番号へ。 */
+const numbers: Map<string, number> = new Map();
 
 function push<K, V>(map: Map<K, V[]>, key: K, value: V) {
   const list = map.get(key);
@@ -53,8 +55,10 @@ function rebuildIndexes(charList: HanjaCharData[], wordList: WordData[]): void {
   hangulToWords.clear();
   hanjaToWords.clear();
   charToWords.clear();
+  numbers.clear();
   seedWords.length = 0;
   for (const w of wordList) {
+    numbers.set(`${w.hangul}|${w.hanja.normalize("NFC")}`, seedWords.length);
     seedWords.push(w);
     push(hanjaToWords, w.hanja, w);
 
@@ -85,16 +89,47 @@ export async function initFullDataset(): Promise<boolean> {
   const baseRaw = (import.meta as { env?: { BASE_URL?: string } }).env?.BASE_URL ?? "/";
   const base = baseRaw.endsWith("/") ? baseRaw : baseRaw + "/";
   try {
-    const [chars, words] = await Promise.all([
+    const [chars, wordsText] = await Promise.all([
       fetch(`${base}data/hanja-chars.json`).then((r) => r.json() as Promise<HanjaCharData[]>),
-      fetch(`${base}data/words.json`).then((r) => r.json() as Promise<WordData[]>),
+      fetch(`${base}data/words.json`).then((r) => r.text()),
     ]);
-    rebuildIndexes(chars, words);
+    rebuildIndexes(chars, JSON.parse(wordsText) as WordData[]);
+    version = versionOf(wordsText);
     fullLoaded = true;
   } catch (e) {
     console.warn("全データの読込に失敗しました。収録語のみで動作します。", e);
   }
   return fullLoaded;
+}
+
+let version = "";
+
+/** words.json の中身から作る短い名前（FNV-1a）。番号の指す語は版ごとに違うので、同じ版どうしでだけ受け渡す。 */
+export function versionOf(text: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return `${text.length.toString(36)}-${(h >>> 0).toString(36)}`;
+}
+
+/** 全データ（words.json）の版（みんなの雨で、語の番号に添える）。全データを読めていなければ ""。 */
+export function wordsVersion(): string {
+  return version;
+}
+
+/**
+ * 全データ（words.json）の中での語の番号（みんなの雨で、語の代わりに送る）。辞書に無い語や、全データを読めていない
+ * とき（番号が words.json と合わない）は undefined。
+ */
+export function wordNumber(hangul: string, hanja: string): number | undefined {
+  return fullLoaded ? numbers.get(`${hangul}|${hanja.normalize("NFC")}`) : undefined;
+}
+
+/** wordNumber の逆。 */
+export function wordByNumber(n: number): WordData | undefined {
+  return fullLoaded ? seedWords[n] : undefined;
 }
 
 /** 漢字1文字の辞書エントリを取得（未収録なら undefined）。 */

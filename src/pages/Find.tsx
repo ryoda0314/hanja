@@ -13,20 +13,22 @@ import { WordRow } from "../components/WordRow";
 import { WordSheet } from "../components/WordSheet";
 import app from "../app.module.css";
 import styles from "./Find.module.css";
+import { Everyone } from "./Everyone";
 import { Meet } from "./Meet";
 import { TryRead } from "./TryRead";
 
-type View = "meet" | "read" | "readable" | "near";
-const VIEWS: View[] = ["meet", "read", "readable", "near"];
+type View = "meet" | "read" | "readable" | "near" | "everyone";
+const VIEWS: View[] = ["meet", "read", "readable", "near", "everyone"];
 /** 戻るボタンで、直に開いたときに戻る先。 */
-const PARENT: Record<View, View> = { meet: "meet", readable: "meet", near: "meet", read: "readable" };
+const PARENT: Record<View, View> = { meet: "meet", readable: "meet", near: "meet", read: "readable", everyone: "meet" };
 type Word = Pick<WordData, "hangul" | "hanja" | "gloss">;
 
 const PAGE = 40;
 
 /**
  * 見つける：開くと、文の中で出会う（ことのあめ の例文の雨）。雨のあとに、ほかの見つけ方として
- * 集めた字だけで読める語（そこから読んでみる）と、あと1字で読める語。どちらも戻るボタンの付いた画面で開く。
+ * 集めた字だけで読める語（そこから読んでみる）と、あと1字で読める語と、みんなの雨（この1時間にみんなが集めた語）。
+ * どれも戻るボタンの付いた画面で開く（みんなの雨は #/find?view=everyone で、X などに貼れる）。
  * 読みたい語は開いて、自分で打ってあつめる。
  */
 export default function Find() {
@@ -88,7 +90,7 @@ export default function Find() {
                 ) : (
                   <Meet data={sentences} collected={collected} owned={ownedKeys} due={due} onOpen={setSheet} />
                 )}
-                {collected.size > 0 ? <Paths readable={readable.length} near={near.length} onOpen={open} /> : null}
+                <Paths readable={readable.length} near={near.length} own={collected.size > 0} onOpen={open} />
                 {sentences ? <p className={app.note}>{t.meet.source}</p> : null}
               </>
             ) : null}
@@ -97,6 +99,7 @@ export default function Find() {
             {view === "near" ? (
               <Near near={near} gain={(w) => unlockedBy(w, collected, ownedKeys).length} onOpen={setSheet} />
             ) : null}
+            {view === "everyone" ? <Everyone collected={collected} owned={ownedKeys} onOpen={setSheet} /> : null}
           </>
         )}
       </div>
@@ -105,11 +108,16 @@ export default function Find() {
   );
 }
 
-/** 雨のあとの、ほかの見つけ方（語の数つき）。 */
-function Paths({ readable, near, onOpen }: { readable: number; near: number; onOpen: (v: View) => void }) {
-  const rows = [
-    { view: "readable" as const, count: readable, note: t.find.pathReadable },
-    { view: "near" as const, count: near, note: t.find.pathNear },
+/** 雨のあとの、ほかの見つけ方（語の数つき）。集めた字から見つける二つは、字を集めてから。みんなの雨はいつでも。 */
+function Paths({ readable, near, own, onOpen }: { readable: number; near: number; own: boolean; onOpen: (v: View) => void }) {
+  const rows: { view: View; count?: number; note: string }[] = [
+    ...(own
+      ? [
+          { view: "readable" as const, count: readable, note: t.find.pathReadable },
+          { view: "near" as const, count: near, note: t.find.pathNear },
+        ]
+      : []),
+    { view: "everyone", note: t.find.pathEveryone },
   ];
   return (
     <section className={styles.paths} aria-labelledby="paths-title">
@@ -123,7 +131,7 @@ function Paths({ readable, near, onOpen }: { readable: number; near: number; onO
               <span className={styles.pathText}>
                 <span className={styles.pathTitle}>
                   {t.find.views[r.view]}
-                  <span className={styles.pathCount}>{t.common.words(r.count)}</span>
+                  {r.count === undefined ? null : <span className={styles.pathCount}>{t.common.words(r.count)}</span>}
                 </span>
                 <span className={styles.pathNote}>{r.note}</span>
               </span>

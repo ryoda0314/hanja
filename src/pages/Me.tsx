@@ -4,11 +4,13 @@ import { getCharData } from "../data/dataset";
 import { t } from "../copy";
 import { exportBackup, parseBackup, restoreWords } from "../db";
 import { ACCENTS, SCRIPTS, usePrefs, type AccentPref, type RatePref } from "../prefs";
+import { CarryPaste, CarrySend } from "../components/Carry";
 import HanjaText from "../components/HanjaText";
 import { Icon } from "../components/Icon";
 import { SpeakButton } from "../components/SpeakButton";
 import { useChars, useWords } from "../util/live";
 import { usePref } from "../util/local";
+import { SHARE_PREF } from "../util/falls";
 import { SEND_PREF } from "../util/usage";
 import { useKoreanVoice } from "../util/speech";
 import app from "../app.module.css";
@@ -42,6 +44,7 @@ export default function Me() {
   const chars = useChars();
   const { script, setScript, accent, setAccent, rate, setRate } = usePrefs();
   const [sendUsage, setSendUsage] = usePref(SEND_PREF, true);
+  const [shareWords, setShareWords] = usePref(SHARE_PREF, true);
   const voice = useKoreanVoice();
   const [dataNote, setDataNote] = useState<{ ok: boolean; text: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -174,11 +177,22 @@ export default function Me() {
               {dataNote.text}
             </p>
           ) : null}
+          <div className={styles.field}>
+            <span className="label">{t.carry.label}</span>
+            <p className={app.note}>{t.carry.note}</p>
+            <CarrySend />
+            <CarryPaste />
+          </div>
           <label className={styles.toggle}>
             <input type="checkbox" checked={sendUsage} onChange={(e) => setSendUsage(e.target.checked)} />
             {t.me.usage}
           </label>
           <p className={app.note}>{t.me.usageNote}</p>
+          <label className={styles.toggle}>
+            <input type="checkbox" checked={shareWords} onChange={(e) => setShareWords(e.target.checked)} />
+            {t.me.share}
+          </label>
+          <p className={app.note}>{t.me.shareNote}</p>
         </section>
 
         <section className={styles.section}>

@@ -10,6 +10,9 @@ import { t } from "../copy";
 import { addWord, db, type CollectedWord } from "../db";
 import { usePrefs } from "../prefs";
 import { useChars, useWords } from "../util/live";
+import { isIOS, isStandalone } from "../util/install";
+import { CarryInto } from "../components/Carry";
+import { EveryoneHint } from "../components/EveryoneHint";
 import { Gain } from "../components/Gain";
 import { InstallHint } from "../components/InstallHint";
 import HanjaText from "../components/HanjaText";
@@ -243,6 +246,7 @@ export default function Collect() {
                   ) : null}
                 </div>
               ) : null}
+              <EveryoneHint />
               {(words?.length ?? 0) >= 3 ? <InstallHint /> : null}
               <section>
                 <div className={app.listHead}>
@@ -259,16 +263,19 @@ export default function Collect() {
               </section>
             </>
           ) : status.kind === "idle" ? (
-            <section className={styles.welcome}>
-              <div className={styles.ground} aria-hidden="true">
-                <Sprout className={styles.sprout} />
-              </div>
-              <ol className={styles.steps} aria-label={t.collect.stepsLabel}>
-                {t.collect.steps.map((s) => (
-                  <li key={s}>{s}</li>
-                ))}
-              </ol>
-            </section>
+            <>
+              {words?.length === 0 && isIOS() && isStandalone() ? <CarryInto /> : null}
+              <section className={styles.welcome}>
+                <div className={styles.ground} aria-hidden="true">
+                  <Sprout className={styles.sprout} />
+                </div>
+                <ol className={styles.steps} aria-label={t.collect.stepsLabel}>
+                  {t.collect.steps.map((s) => (
+                    <li key={s}>{s}</li>
+                  ))}
+                </ol>
+              </section>
+            </>
           ) : null}
         </div>
       </div>

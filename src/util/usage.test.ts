@@ -67,3 +67,45 @@ describe("countUsage", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+describe("引き継ぎのリンクで移ったとき", () => {
+  const ID = "0f8fad5b-d9cb-469f-a165-70867728950e";
+  const sent = () => JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string).p_device;
+
+  it("番号の無いところへは、前のところの番号を引き継いで数える", async () => {
+    const { adoptCarriedUsage, countUsage } = await load(true, "https://kotonone.example");
+    adoptCarriedUsage(new URLSearchParams({ i: ID }), false);
+    countUsage("open");
+    expect(sent()).toBe(ID);
+  });
+
+  it("もう番号があれば、replace のときだけ替える", async () => {
+    const { adoptCarriedUsage } = await load(true, "https://kotonone.example");
+    store.set("hanjaatume.device", "11111111-1111-4111-8111-111111111111");
+    adoptCarriedUsage(new URLSearchParams({ i: ID }), false);
+    expect(store.get("hanjaatume.device")).not.toBe(ID);
+    adoptCarriedUsage(new URLSearchParams({ i: ID }), true);
+    expect(store.get("hanjaatume.device")).toBe(ID);
+  });
+
+  it("番号の形でなければ引き継がない", async () => {
+    const { adoptCarriedUsage } = await load(true, "https://kotonone.example");
+    adoptCarriedUsage(new URLSearchParams({ i: "not-a-device" }), true);
+    expect(store.has("hanjaatume.device")).toBe(false);
+  });
+
+  it("前のところで送るのを止めていたら、ここでも止める", async () => {
+    const { adoptCarriedUsage, countUsage, usageForCarry, SEND_PREF } = await load(true, "https://kotonone.example");
+    adoptCarriedUsage(new URLSearchParams({ u: "0" }), false);
+    countUsage("open");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(store.get(`hanjaatume.${SEND_PREF}`)).toBe("0");
+    expect(usageForCarry()).toEqual({ u: "0" });
+  });
+
+  it("リンクに添えるのは、この端末の番号", async () => {
+    const { countUsage, usageForCarry } = await load(true, "https://kotonone.example");
+    countUsage("open");
+    expect(usageForCarry()).toEqual({ i: sent() });
+  });
+});

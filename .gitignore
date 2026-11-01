@@ -25,3 +25,6 @@ scripts/.cache
 .shots
 
 # 紹介映像（promo/ は別のプロジェクト。書き出しや取ってきた字・音は promo/.gitignore で外す）
+
+# 使われ方の数の画像（scripts/og/stats.mjs で投稿の直前に書き出す。数が変わるので追跡しない）
+scripts/og/stats*.png

@@ -6,6 +6,7 @@ import Dexie, { type EntityTable } from "dexie";
 import type { ResolvedWord } from "./data/types";
 import { hanjaToWords, splitHanja } from "./data/dataset";
 import { metUpdate, readUpdate, type WordProgress } from "./data/stage";
+import { shareWord } from "./util/falls";
 import { countUsage } from "./util/usage";
 
 /** ユーザーが集めた漢字語1件。覚え具合の出来事（WordProgress）も持つ（前の版の語には無い）。 */
@@ -141,6 +142,7 @@ export async function addWord(word: ResolvedWord): Promise<boolean> {
   if (added) {
     void askPersist();
     countUsage("collect");
+    shareWord(word);
   }
   return added;
 }
@@ -240,8 +242,8 @@ export type BackupWord = Pick<CollectedWord, "hangul" | "hanja" | "gloss" | "sou
 
 const BACKUP_APP = "kotonone";
 
-/** 集めた語をすべて、読み込み直せる JSON 文字列にする。 */
-export async function exportBackup(): Promise<string> {
+/** 集めた語をすべて、読み込み直せる JSON 文字列にする（pretty でなければ詰めて。引き継ぎのリンク用）。 */
+export async function exportBackup(pretty = true): Promise<string> {
   const words = await db.words.orderBy("addedAt").toArray();
   return JSON.stringify(
     {
@@ -258,7 +260,7 @@ export async function exportBackup(): Promise<string> {
       })),
     },
     null,
-    1
+    pretty ? 1 : undefined
   );
 }
 

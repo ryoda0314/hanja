@@ -6,6 +6,7 @@ import Words from "./pages/Words";
 import Hanja from "./pages/Hanja";
 import HanjaDetail from "./pages/HanjaDetail";
 import Me from "./pages/Me";
+import Carry from "./pages/Carry";
 
 /** 前の版の図鑑のアドレス（#/dex/學）は字のページへ。 */
 function OldDexChar() {
@@ -24,6 +25,7 @@ export const router = createHashRouter([
       { path: "/hanja", element: <Hanja /> },
       { path: "/hanja/:char", element: <HanjaDetail /> },
       { path: "/me", element: <Me /> },
+      { path: "/carry", element: <Carry /> },
       // 前の版のアドレス
       { path: "/add", element: <Navigate to="/" replace /> },
       { path: "/dex", element: <Navigate to="/hanja" replace /> },
