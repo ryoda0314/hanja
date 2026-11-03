@@ -2,7 +2,8 @@
 -- 名前はすべて kn_ で始める（ことのあめ は pl_、旧アプリの表には触れない）。
 --
 -- 送られるのは、端末ごとの番号（その端末で作った乱数。人とは結びつかない）と、1時間ごとの回数（開いた・あつめた・読めた）と、
--- ホーム画面から開いたかどうかだけ。集めた語・文・名前・メールは送らない。
+-- ホーム画面から開いたかどうかと、端末の種類（ios：iPhone・iPad、android、pc：パソコン、other の4つだけ）。
+-- 集めた語・文・名前・メールは送らない。ことのあめ の管理画面（/admin/apps/kotonone）もこの表を読む。
 -- 表は外から読めず書けず、kn_ping だけがその時間の行を足して数える。
 -- まとめは Supabase の中で数える（kn_summary：これまで・きょう・7日・30日の端末の数、kn_stats：日ごと、kn_hourly：時間ごと、
 -- kn_cohorts：初めて来た日ごとに、その後の日にまた来た端末の数）。
@@ -12,7 +13,9 @@
 --   node --env-file=.env.local scripts/migrate.mjs ../hanjaatume/supabase/usage.sql
 -- 2026-10-26 に当てた最初の版（日ごとの kn_days に数える）を、この版で1時間ごと（kn_hours）に切り替える。kn_days の数は
 -- そのまま残り、日ごとのまとめに足される。切り替える前の時間ごとの数は無い（日ごとにしか数えていなかった）。
--- 外すとき：drop view public.kn_cohorts, public.kn_summary, public.kn_stats, public.kn_hourly; drop function public.kn_ping(uuid, text, boolean);
+-- 2026-11-03：端末の種類（kn_hours.platform）を足した。kn_ping は4つ目に p_platform（省略できる）を取り、前の3つだけで
+-- 呼ぶ公開中の版もそのまま数える。
+-- 外すとき：drop view public.kn_cohorts, public.kn_summary, public.kn_stats, public.kn_hourly; drop function public.kn_ping(uuid, text, boolean, text);
 --           drop table public.kn_hours, public.kn_days;
 
 -- 最初の版の、日ごとの数（2026-10-26 から、この版を当てるまで）。
@@ -44,9 +47,14 @@ create index if not exists kn_hours_hour on public.kn_hours (hour);
 alter table public.kn_hours enable row level security;
 revoke all on table public.kn_hours from public, anon, authenticated;
 
+-- その時間に開いた端末の種類（最後に送られたもの）。前からの行は分からないので空。
+alter table public.kn_hours add column if not exists platform text check (platform in ('ios', 'android', 'pc', 'other'));
+
 -- その時間の行に一つ数える。知らない種類は数えない。だれでも呼べるので、1時間の端末の数と回数に天井を付ける
 -- （番号を変えて呼び続けられても、表が際限なく大きくならないように）。天井は、話題になった1時間でも届かない高さに。
-create or replace function public.kn_ping(p_device uuid, p_kind text, p_standalone boolean)
+-- 3つの引数の版は消して入れ替える（同じ名前が二つあると、API がどちらを呼ぶか選べなくなる）。
+drop function if exists public.kn_ping(uuid, text, boolean);
+create or replace function public.kn_ping(p_device uuid, p_kind text, p_standalone boolean, p_platform text default null)
 returns void
 language plpgsql
 security definer
@@ -54,6 +62,7 @@ set search_path = public
 as $$
 declare
   this_hour timestamp := date_trunc('hour', now() at time zone 'Asia/Tokyo');
+  kind_of text := case when p_platform in ('ios', 'android', 'pc', 'other') then p_platform end;
 begin
   if p_device is null or p_kind not in ('open', 'collect', 'read') then
     return;
@@ -62,25 +71,27 @@ begin
      and (select count(*) from kn_hours where hour = this_hour) >= 20000 then
     return;
   end if;
-  insert into kn_hours as h (device, hour, opens, collects, reads, standalone)
+  insert into kn_hours as h (device, hour, opens, collects, reads, standalone, platform)
   values (
     p_device,
     this_hour,
     (p_kind = 'open')::int,
     (p_kind = 'collect')::int,
     (p_kind = 'read')::int,
-    coalesce(p_standalone, false)
+    coalesce(p_standalone, false),
+    kind_of
   )
   on conflict (device, hour) do update set
     opens = least(h.opens + excluded.opens, 500),
     collects = least(h.collects + excluded.collects, 500),
     reads = least(h.reads + excluded.reads, 500),
-    standalone = h.standalone or excluded.standalone;
+    standalone = h.standalone or excluded.standalone,
+    platform = coalesce(excluded.platform, h.platform);
 end;
 $$;
 
-revoke all on function public.kn_ping(uuid, text, boolean) from public;
-grant execute on function public.kn_ping(uuid, text, boolean) to anon, authenticated;
+revoke all on function public.kn_ping(uuid, text, boolean, text) from public;
+grant execute on function public.kn_ping(uuid, text, boolean, text) to anon, authenticated;
 
 -- まとめ。最初の版のまとめ（kn_stats）とは列の型が違うので、消して作り直す（見え方の定義だけで、数は表に残る）。
 drop view if exists public.kn_cohorts;

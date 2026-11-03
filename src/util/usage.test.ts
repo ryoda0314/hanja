@@ -40,6 +40,14 @@ describe("countUsage", () => {
     expect(JSON.parse(init.body as string)).toMatchObject({ p_kind: "open", p_standalone: false });
   });
 
+  it("端末の種類を添える", async () => {
+    vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 (Linux; Android 14; Pixel 8)", maxTouchPoints: 5 });
+    const { countUsage } = await load(true, "https://kotonone.example");
+    countUsage("open");
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toMatchObject({ p_platform: "android" });
+  });
+
   it("同じ端末は同じ番号で送る", async () => {
     const { countUsage } = await load(true, "https://kotonone.example");
     countUsage("open");
@@ -107,5 +115,34 @@ describe("引き継ぎのリンクで移ったとき", () => {
     const { countUsage, usageForCarry } = await load(true, "https://kotonone.example");
     countUsage("open");
     expect(usageForCarry()).toEqual({ i: sent() });
+  });
+});
+
+describe("端末の種類", () => {
+  it("iPhone・iPad、Mac と名乗る iPad は ios", async () => {
+    const { platformOf } = await load(true, "https://kotonone.example");
+    expect(platformOf("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)", 5)).toBe("ios");
+    expect(platformOf("Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)", 5)).toBe("ios");
+    expect(platformOf("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", 5)).toBe("ios");
+  });
+
+  it("Linux とも名乗る Android は android", async () => {
+    const { platformOf } = await load(true, "https://kotonone.example");
+    expect(platformOf("Mozilla/5.0 (Linux; Android 14; Pixel 8)", 5)).toBe("android");
+  });
+
+  it("触れない Mac・Windows・Chromebook・Linux はパソコン", async () => {
+    const { platformOf } = await load(true, "https://kotonone.example");
+    expect(platformOf("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", 0)).toBe("pc");
+    expect(platformOf("Mozilla/5.0 (Windows NT 10.0; Win64; x64)", 10)).toBe("pc");
+    expect(platformOf("Mozilla/5.0 (X11; CrOS x86_64 14541.0.0)", 0)).toBe("pc");
+    expect(platformOf("Mozilla/5.0 (X11; Linux x86_64)", 0)).toBe("pc");
+  });
+
+  it("わからないものは other", async () => {
+    const { platformOf } = await load(true, "https://kotonone.example");
+    expect(platformOf("curl/8.4.0", 0)).toBe("other");
+    expect(platformOf("", 0)).toBe("other");
+    expect(platformOf(undefined, undefined)).toBe("other");
   });
 });

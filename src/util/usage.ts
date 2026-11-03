@@ -1,5 +1,6 @@
 // 使われ方の数（何人が使っているか）。端末ごとの番号（この端末で作った乱数。人とは結びつかない）と、開いた・あつめた・
-// 読めた の回数と、ホーム画面から開いたかだけを、姉妹アプリ ことのあめ の Supabase（kn_ping、supabase/usage.sql）に送る。
+// 読めた の回数と、ホーム画面から開いたかと、端末の種類（iPhone・iPad／Android／パソコン／その他の4つだけ）を、
+// 姉妹アプリ ことのあめ の Supabase（kn_ping、supabase/usage.sql）に送る。
 // 集めた語・文は送らない。自分 で止められる。送れなくても（オフライン・送り先が無い）何も起きない。
 // 数えるのは公開先（.env の VITE_SITE_URL）で開いたときだけ。手元の npm run dev・preview や、Vercel の試しの公開は数えない。
 import { isStandalone } from "./install";
@@ -78,12 +79,28 @@ export function rpc(name: string, body: unknown): Promise<Response> | null {
   });
 }
 
+export type Platform = "ios" | "android" | "pc" | "other";
+
+/**
+ * 端末の種類を4つにだけ分ける。iPadOS は Mac と名乗るので、触れる画面かどうかで見分ける（install の isIOS と同じ）。
+ * Android は Linux とも名乗るので先に見る。
+ */
+export function platformOf(userAgent: unknown, maxTouchPoints: unknown): Platform {
+  if (typeof userAgent !== "string" || !userAgent) return "other";
+  const touch = typeof maxTouchPoints === "number" && maxTouchPoints > 1;
+  if (/iPhone|iPad|iPod/.test(userAgent) || (/Macintosh/.test(userAgent) && touch)) return "ios";
+  if (/Android/.test(userAgent)) return "android";
+  if (/Windows|Macintosh|CrOS|X11|Linux/.test(userAgent)) return "pc";
+  return "other";
+}
+
 /** 一つ数える（待たない）。 */
 export function countUsage(kind: UsageKind): void {
   if (!onPublicSite() || !allowed()) return;
   const device = deviceId();
   if (!device) return;
-  rpc("kn_ping", { p_device: device, p_kind: kind, p_standalone: isStandalone() })?.catch(() => {
+  const platform = typeof navigator === "undefined" ? "other" : platformOf(navigator.userAgent, navigator.maxTouchPoints);
+  rpc("kn_ping", { p_device: device, p_kind: kind, p_standalone: isStandalone(), p_platform: platform })?.catch(() => {
     /* 数えられなかっただけ */
   });
 }

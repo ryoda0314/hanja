@@ -144,7 +144,9 @@ node scripts/build-sentences.mjs --kotonoame <ことのあめ のリポジトリ
 ## 使われ方の数（管理者）
 
 何人が使っているかだけを、姉妹アプリ ことのあめ の Supabase に数える（`src/util/usage.ts`）。送るのは、端末ごとの番号
-（その端末で作った乱数）と、1時間ごとの 開いた・あつめた・読めた の回数と、ホーム画面から開いたかだけ。集めた語は送らない。
+（その端末で作った乱数）と、1時間ごとの 開いた・あつめた・読めた の回数と、ホーム画面から開いたかと、端末の種類
+（`platformOf`：iPhone・iPad／Android／パソコン／その他の4つだけ）。集めた語は送らない。ことのあめ の管理画面
+（`/admin/apps/kotonone`）で、ほかの姉妹アプリと同じ形で見られる。
 自分 の「使われ方の数を送る」で止められる。送り先は `.env` の `VITE_SUPABASE_URL`・`VITE_SUPABASE_ANON_KEY`
 （ことのあめ と同じ、公開してよい値。空なら送らない）。数えるのは公開先（`.env` の `VITE_SITE_URL`）で開いたときだけで、
 `npm run dev`・preview や Vercel の試しの公開は数えない（公開先を変えたら `VITE_SITE_URL` も変える）。
